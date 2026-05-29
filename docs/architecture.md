@@ -5,7 +5,7 @@
 > D1–D18. This is the authoritative technical reference per Constitution
 > Principle II (Architecture First). Update during each spec's polish phase.
 
-Last updated: 2026-05-29
+Last updated: 2026-05-29 (MVP implementation: US1–US4 complete)
 
 ## 1. Overview
 
@@ -239,9 +239,9 @@ Single-threaded async event loop (or a small set of tasks):
 
 Rationale: a TUI must serialize all `State` mutation and rendering. We avoid
 shared-mutable-state across threads; the PTY reader hands bytes to the loop
-via a channel. (Exact runtime — `tokio` vs. a hand-rolled `mio`/thread+channel
-select — to be finalized in the MVP plan; the layering does not depend on the
-choice.)
+via a channel. **Finalized (MVP):** a hand-rolled single-threaded event loop
+with a dedicated PTY-reader thread feeding an `std::sync::mpsc` channel — no
+async runtime (`tokio`) is used.
 
 ## 7. Module / Crate Layout (proposed)
 
@@ -317,14 +317,16 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
 - **Non-TTY invocation**: if stdout isn't a TTY, behave sanely (no TUI);
   honor `NO_COLOR`.
 
-## 11. Open Implementation Questions (for the MVP plan, not blockers)
+## 11. Open Implementation Questions (resolved during MVP)
 
-- Async runtime choice (`tokio` vs threads+channels) — layering is agnostic.
-- Exact passthrough strategy: hide all kapollo chrome vs. reserve a status
-  line during alt-screen apps.
-- Per-shell hook details for fish vs. bash (prompt/preexec integration) and
-  the exact auto-injection mechanism (D19): temp rc file, `--init-file`,
-  `XDG_*` override, or sourcing a generated snippet at shell start.
+- **Async runtime** — Resolved: hand-rolled single-threaded event loop with a
+  PTY-reader thread + `mpsc` channel; no `tokio` (§6).
+- **Passthrough strategy** — Resolved: kapollo hides all of its own chrome and
+  hands the full terminal to the alt-screen program, repainting the split UI
+  on alt-screen leave (§4).
+- **Per-shell hook delivery** — Resolved: fish via `--init-command`; bash via a
+  generated temp rc file (`--rcfile`) that sources the user's `~/.bashrc` then
+  installs the OSC 133 marks; other shells fall back to sentinel injection.
 
 ## 12. Decision Traceability
 
