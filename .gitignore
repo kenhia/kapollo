@@ -1,0 +1,17 @@
+# Project-specific ignores
+.scratch/
+.scratch-*/
+
+# Rust build artifacts
+/target
+
+# Backtrace / profiling scratch
+*.rs.bk
+perf.data
+perf.data.old
+flamegraph.svg
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store

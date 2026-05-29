@@ -1,0 +1,37 @@
+[package]
+name = "kapollo"
+version = "0.1.0"
+edition = "2021"
+description = "Apollo-DM-style split-pad terminal REPL that wraps your shell"
+license = "MIT"
+authors = ["Ken Hiatt"]
+repository = "https://github.com/kenhia/kapollo"
+readme = "README.md"
+keywords = ["terminal", "tui", "shell", "repl", "pty"]
+categories = ["command-line-utilities", "command-line-interface"]
+
+[lib]
+name = "kapollo"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kapollo"
+path = "src/main.rs"
+
+[[bin]]
+name = "kap"
+path = "src/bin/kap.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+portable-pty = "0.8"
+vte = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+anyhow = "1.0"
+thiserror = "2.0"
+directories = "5.0"
