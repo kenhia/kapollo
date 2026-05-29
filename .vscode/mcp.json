@@ -1,0 +1,32 @@
+{
+  "servers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "kwi": {
+      "type": "stdio",
+      "command": "kwi-mcp"
+    },
+    "kpidash": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "kpidash-mcp"
+      ],
+      "cwd": "/home/ken/src/tools/kpidash/clients/kpidash-mcp",
+      "env": {
+        "KPIDASH_REDIS_HOST": "rpi53",
+        "REDISCLI_AUTH": "${env:REDISCLI_AUTH}"
+      }
+    },
+    "klams": {
+      "type": "http",
+      "url": "http://kubs0:7777/mcp",
+      "headers": {
+        "Authorization": "Bearer b85a0800155c484390baf29f49a711883830811eb75e5d765f5e6683844f42b6"
+      }
+    }
+  }
+}
