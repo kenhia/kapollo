@@ -27,3 +27,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Configuration** from `~/.config/kapollo/config.toml` (shell, leader char,
   output caps) with defaults and cap clamping; file-only logging; `NO_COLOR`
   support; graceful degradation on tiny terminals.
+
+### MVP hardening (002)
+
+#### Added
+
+- **Borderless chrome**: the transcript and input pads drop their borders; each
+  command is echoed with a colorized prompt glyph (`λ` by default, configurable
+  via `prompt_char` / `prompt_color`) and blocks are separated by a blank line.
+- **Status rule** directly above the input pad showing the cwd (always) and the
+  last exit code (only when non-zero); the cwd follows `cd` via **OSC 7** cwd
+  reports.
+- **Page and jump scrolling**: PageUp/PageDown scroll the transcript a page at a
+  time and Home/End jump to the oldest/newest output; submitting re-pins to the
+  newest output.
+- **`/exit`** as an alias for `/quit`.
+
+#### Changed
+
+- **Output normalization**: captured output is reduced to clean printable text —
+  bare `\r` and other C0 controls are dropped, `\r\n` collapses to `\n`, and
+  OSC/CSI/DCS escape sequences (including SGR styling and terminal
+  query/responses) never leak into the transcript as visible text.
+- **Flood responsiveness**: ring-buffer cap enforcement is amortized O(1) and the
+  event loop drains the PTY in bounded passes, so multi-million-line output
+  completes near shell-native time and Ctrl-C stays responsive.
+
+#### Fixed
+
+- **Passthrough fidelity**: stdin is forwarded to alt-screen programs verbatim
+  (no `KeyEvent` re-encoding), so terminal query/responses (OSC 11/10/4, Device
+  Attributes, cursor-position) reach the program intact; an explicit SGR/cursor
+  reset is emitted on passthrough exit so no residual style or hidden cursor
+  bleeds into the restored UI.

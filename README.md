@@ -36,10 +36,12 @@ _A screenshot/cast will be added here._
 - **Multiline editing** — Shift+Enter / Alt+Enter insert newlines; Enter
   submits the whole buffer.
 - **Input history** — kapollo's own Up/Down history, separate from the shell's.
-- **Full-screen passthrough** — `vim`, `less`, `top` run natively; the split-pad
-  UI is restored on exit.
-- **Slash commands** — `/help`, `/clear`, `/quit`, with a `//` escape for a
-  literal leader.
+- **Full-screen passthrough** — `vim`, `less`, `top` run natively with stdin
+  forwarded verbatim; the split-pad UI is restored cleanly on exit.
+- **Clean transcript** — borderless pads, a colorized `λ` prompt echoing each
+  command, and a status rule that follows `cd` and flags non-zero exit codes.
+- **Slash commands** — `/help`, `/clear`, `/quit` (and `/exit`), with a `//`
+  escape for a literal leader.
 - **Safe by default** — Ctrl-C interrupts the running command (not kapollo); the
   terminal is always restored on exit, error, and panic.
 
@@ -80,11 +82,12 @@ kap --help               # full help
 | Shift+Enter / Alt+Enter | Insert a newline (multiline compose) |
 | Up / Down | Recall input history |
 | Left / Right | Move the cursor |
-| PageUp / PageDown | Scroll the transcript |
+| PageUp / PageDown | Scroll the transcript a page at a time |
+| Home / End | Jump to the oldest / newest output |
 | Ctrl-C | Interrupt the running command |
 
-Slash commands: `/help`, `/clear`, `/quit`. See [docs/usage.md](docs/usage.md)
-for the configuration schema and full details.
+Slash commands: `/help`, `/clear`, `/quit` (alias `/exit`). See
+[docs/usage.md](docs/usage.md) for the configuration schema and full details.
 
 ## Documentation
 

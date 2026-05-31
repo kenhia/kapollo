@@ -35,3 +35,6 @@ tracing-appender = "0.2"
 anyhow = "1.0"
 thiserror = "2.0"
 directories = "5.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

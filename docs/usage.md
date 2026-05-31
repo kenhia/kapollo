@@ -20,7 +20,8 @@ across commands because it is your real shell.
 | **Left** / **Right** | Move the cursor within the input pad |
 | **Backspace** | Delete the character before the cursor |
 | **Up** / **Down** | Recall previous / next entries from kapollo's input history |
-| **PageUp** / **PageDown** | Scroll the transcript independently of the input pad |
+| **PageUp** / **PageDown** | Scroll the transcript a page at a time |
+| **Home** / **End** | Jump to the oldest / newest output in the transcript |
 | **Ctrl-C** | Send SIGINT to the running command (interrupts the command, not kapollo) |
 
 `Shift+Enter` requires a terminal that supports the Kitty keyboard protocol;
@@ -47,6 +48,7 @@ literal leading leader char to the shell.
 | `/help` | Show available slash commands |
 | `/clear` | Clear the visible transcript |
 | `/quit` | Exit kapollo, restoring the terminal cleanly |
+| `/exit` | Alias for `/quit` |
 
 ## Configuration
 
@@ -60,6 +62,12 @@ shell = "/usr/bin/fish"
 
 # Leader character for slash commands (default "/").
 leader_char = "/"
+
+# Prompt glyph echoed before each command in the transcript (default "λ").
+prompt_char = "λ"
+
+# Color of the prompt glyph (named color; default "red"). Honors NO_COLOR.
+prompt_color = "red"
 
 [caps]
 # Per-block output retention. Defaults: 1 MiB / 50000 lines.
@@ -76,7 +84,15 @@ transcript_blocks = 1000
 When a block exceeds its cap, the oldest output is dropped and a
 `… output truncated …` marker is shown.
 
+## Chrome
+
+The transcript is borderless. Each command is echoed with a colorized prompt
+glyph (`λ` by default; see `prompt_char` / `prompt_color`), and consecutive
+blocks are separated by a blank line. A single status rule sits directly above
+the input pad showing the current working directory (which follows `cd`) and the
+last exit code — the exit code is shown only when it is non-zero.
+
 ## Color
 
 kapollo honors the `NO_COLOR` convention: set `NO_COLOR` to a non-empty value
-to disable color in kapollo's own chrome.
+to disable color in kapollo's own chrome (the `λ` prompt and the status rule).

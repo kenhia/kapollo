@@ -2,6 +2,8 @@
 //! non-slash passthrough (FR-021, FR-022).
 
 use kapollo::input::router::{route, Routed};
+use kapollo::slash::builtins::help_text;
+use kapollo::slash::{dispatch, Dispatch, SlashCommand};
 
 #[test]
 fn slash_prefixed_input_is_a_command() {
@@ -31,4 +33,20 @@ fn respects_a_configured_leader_char() {
         route("/usr/bin", ':'),
         Routed::Shell("/usr/bin".to_string())
     );
+}
+
+#[test]
+fn exit_is_an_alias_for_quit() {
+    assert_eq!(dispatch("exit"), Dispatch::Command(SlashCommand::Quit));
+    assert_eq!(dispatch("quit"), Dispatch::Command(SlashCommand::Quit));
+}
+
+#[test]
+fn help_lists_exit_and_the_scrolling_keys() {
+    let text = help_text('/');
+    assert!(text.contains("/exit"), "help lists the /exit alias");
+    assert!(text.contains("PageUp"));
+    assert!(text.contains("PageDown"));
+    assert!(text.contains("Home"));
+    assert!(text.contains("End"));
 }

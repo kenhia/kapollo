@@ -34,7 +34,7 @@ pub fn dispatch(command: &str) -> Dispatch {
     match name {
         "help" => Dispatch::Command(SlashCommand::Help),
         "clear" => Dispatch::Command(SlashCommand::Clear),
-        "quit" => Dispatch::Command(SlashCommand::Quit),
+        "quit" | "exit" => Dispatch::Command(SlashCommand::Quit),
         other => {
             let token = other.split_whitespace().next().unwrap_or("").to_string();
             Dispatch::Unknown(token)

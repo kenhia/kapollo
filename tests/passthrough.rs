@@ -57,3 +57,40 @@ fn alt_screen_leave_restores_the_block_and_resumes_capture() {
     assert!(block.output_lossy().contains("done"));
     assert_eq!(block.state, BlockState::Closed);
 }
+
+#[test]
+fn passthrough_forwards_stdin_verbatim_without_reencoding() {
+    // A terminal background-color report (OSC 11) arriving on stdin in response
+    // to a program's query must reach the program intact, with its ESC and
+    // payload preserved — not mangled into visible `]11;rgb:...` key input
+    // (FR-012).
+    let osc11_response = b"\x1b]11;rgb:2020/2020/2020\x07";
+
+    let forwarded = kapollo::ui::passthrough::forward_stdin(osc11_response);
+
+    assert_eq!(
+        forwarded, osc11_response,
+        "stdin is forwarded byte-for-byte during passthrough"
+    );
+    assert!(
+        forwarded.contains(&0x1b),
+        "the leading ESC is preserved (not stripped as it would be by key re-encoding)"
+    );
+}
+
+#[test]
+fn passthrough_exit_resets_sgr_and_cursor() {
+    // On leaving the alternate screen the host must be reset so no residual
+    // style or hidden cursor from the full-screen program bleeds into the
+    // repainted split-pad UI (FR-013).
+    let reset = kapollo::ui::passthrough::RESET_SEQUENCE;
+
+    assert!(
+        reset.windows(4).any(|w| w == b"\x1b[0m"),
+        "reset clears SGR styling"
+    );
+    assert!(
+        reset.windows(6).any(|w| w == b"\x1b[?25h"),
+        "reset re-shows the cursor"
+    );
+}
