@@ -94,8 +94,22 @@ pub fn install_panic_hook() {
     }));
 }
 
-/// Render the split-pad layout: transcript on top, input pad below, status line
-/// at the bottom.
+/// Compute the split-pad layout: the transcript fills the remaining space, a
+/// single-line status rule sits directly above the input, and the input pad
+/// occupies `input_height` lines at the bottom. Returns
+/// `[transcript, status_rule, input]` (FR-005, FR-006).
+pub fn split_layout(area: ratatui::layout::Rect, input_height: u16) -> [ratatui::layout::Rect; 3] {
+    let chunks = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(1),
+        Constraint::Length(input_height),
+    ])
+    .split(area);
+    [chunks[0], chunks[1], chunks[2]]
+}
+
+/// Render the split-pad layout: borderless transcript on top, a single status
+/// rule, then the input pad at the bottom.
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
@@ -108,19 +122,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         return;
     }
 
-    let input_lines = (app.input.as_str().split('\n').count() as u16).clamp(1, MAX_INPUT_LINES);
-    let input_height = input_lines + 2; // account for the surrounding border
+    // The input pad is borderless now, so its height is just its line count.
+    let input_height = (app.input.as_str().split('\n').count() as u16).clamp(1, MAX_INPUT_LINES);
 
-    let chunks = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(input_height),
-        Constraint::Length(1),
-    ])
-    .split(area);
+    let [transcript_area, status_area, input_area] = split_layout(area, input_height);
 
-    render_transcript(frame, chunks[0], app);
-    render_input(frame, chunks[1], app);
-    render_status(frame, chunks[2], app);
+    render_transcript(frame, transcript_area, app);
+    render_status(frame, status_area, app);
+    render_input(frame, input_area, app);
 }
 
 fn render_transcript(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

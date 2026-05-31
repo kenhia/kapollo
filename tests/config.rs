@@ -58,3 +58,34 @@ fn invalid_leader_char_errors() {
     let result = Config::from_toml("leader_char = \"too long\"\n", Path::new("bad.toml"));
     assert!(result.is_err(), "multi-character leader_char must error");
 }
+
+#[test]
+fn prompt_defaults_when_absent() {
+    let cfg = Config::default();
+    assert_eq!(cfg.prompt_char, 'λ');
+    assert_eq!(cfg.prompt_color, ratatui::style::Color::Red);
+}
+
+#[test]
+fn prompt_char_and_color_parse() {
+    let cfg = Config::from_toml(
+        "prompt_char = \"❯\"\nprompt_color = \"cyan\"\n",
+        Path::new("test.toml"),
+    )
+    .expect("prompt keys should parse");
+    assert_eq!(cfg.prompt_char, '❯');
+    assert_eq!(cfg.prompt_color, ratatui::style::Color::Cyan);
+}
+
+#[test]
+fn multi_char_prompt_char_errors() {
+    let result = Config::from_toml("prompt_char = \">>\"\n", Path::new("bad.toml"));
+    assert!(result.is_err(), "multi-character prompt_char must error");
+}
+
+#[test]
+fn unknown_prompt_color_falls_back_to_default() {
+    let cfg = Config::from_toml("prompt_color = \"chartreuse\"\n", Path::new("test.toml"))
+        .expect("unknown color must warn-and-default, not error");
+    assert_eq!(cfg.prompt_color, ratatui::style::Color::Red);
+}

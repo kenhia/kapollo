@@ -5,6 +5,8 @@
 
 use vte::{Params, Parser, Perform};
 
+use std::path::PathBuf;
+
 /// A block-boundary or screen-mode signal extracted from the byte stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Boundary {
@@ -20,6 +22,8 @@ pub enum Boundary {
     AltScreenEnter,
     /// Left the alternate screen; the split UI resumes.
     AltScreenLeave,
+    /// OSC 7: the shell reported a new working directory (FR-019).
+    Cwd(PathBuf),
 }
 
 /// One unit of parsed PTY output, in stream order.
@@ -84,27 +88,37 @@ impl Perform for Performer<'_> {
     }
 
     fn execute(&mut self, byte: u8) {
-        // Preserve whitespace control bytes (newline, carriage return, tab)
-        // that shape the rendered output.
-        if matches!(byte, b'\n' | b'\r' | b'\t') {
+        // Normalize captured output to clean printable text (FR-001): keep only
+        // newline and tab. Bare carriage returns have no grid model to honor and
+        // would otherwise render as visible artifacts (and turn `\r\n` into a
+        // stray control byte), so they are dropped along with all other C0
+        // controls. OSC/CSI/DCS escape sequences are consumed by `vte` and never
+        // reach `execute`/`print`, so residual styling never leaks as text.
+        if matches!(byte, b'\n' | b'\t') {
             self.pending.push(byte);
         }
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        if params.first().copied() != Some(b"133".as_ref()) {
-            return;
-        }
-        match params.get(1).copied() {
-            Some(b"A") => self.boundary(Boundary::PromptStart),
-            Some(b"B") => self.boundary(Boundary::CommandStart),
-            Some(b"C") => self.boundary(Boundary::OutputStart),
-            Some(b"D") => {
-                let exit_code = params
-                    .get(2)
-                    .and_then(|p| std::str::from_utf8(p).ok())
-                    .and_then(|s| s.trim().parse::<i32>().ok());
-                self.boundary(Boundary::CommandEnd { exit_code });
+        match params.first().copied() {
+            Some(b"133") => match params.get(1).copied() {
+                Some(b"A") => self.boundary(Boundary::PromptStart),
+                Some(b"B") => self.boundary(Boundary::CommandStart),
+                Some(b"C") => self.boundary(Boundary::OutputStart),
+                Some(b"D") => {
+                    let exit_code = params
+                        .get(2)
+                        .and_then(|p| std::str::from_utf8(p).ok())
+                        .and_then(|s| s.trim().parse::<i32>().ok());
+                    self.boundary(Boundary::CommandEnd { exit_code });
+                }
+                _ => {}
+            },
+            // OSC 7: `file://host/abs-path` cwd report (FR-019).
+            Some(b"7") => {
+                if let Some(path) = params.get(1).and_then(|p| parse_osc7_cwd(p)) {
+                    self.boundary(Boundary::Cwd(path));
+                }
             }
             _ => {}
         }
@@ -123,6 +137,42 @@ impl Perform for Performer<'_> {
             }
         }
     }
+}
+
+/// Parse an OSC 7 `file://host/abs-path` payload into the absolute working
+/// directory it reports, dropping the `file://` scheme and host and
+/// percent-decoding the path (FR-019). Returns `None` for payloads that are not
+/// a well-formed `file://` URI with an absolute path.
+fn parse_osc7_cwd(raw: &[u8]) -> Option<PathBuf> {
+    let s = std::str::from_utf8(raw).ok()?;
+    let rest = s.strip_prefix("file://")?;
+    // After the scheme comes an optional host, then the absolute path beginning
+    // at the first `/`.
+    let slash = rest.find('/')?;
+    let decoded = percent_decode(&rest[slash..]);
+    Some(PathBuf::from(decoded))
+}
+
+/// Minimal percent-decoding for OSC 7 paths (`%20` → space, etc.). Invalid or
+/// truncated escapes are passed through literally.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(test)]

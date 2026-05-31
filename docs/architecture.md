@@ -5,7 +5,8 @@
 > D1–D18. This is the authoritative technical reference per Constitution
 > Principle II (Architecture First). Update during each spec's polish phase.
 
-Last updated: 2026-05-29 (MVP implementation: US1–US4 complete)
+Last updated: 2026-05-30 (MVP hardening 002: render normalization, borderless
+chrome, passthrough verbatim stdin, OSC 7 cwd, bounded event loop)
 
 ## 1. Overview
 
@@ -82,7 +83,12 @@ terminal via **passthrough**.
   (1) detect **OSC 133** prompt/command marks for block boundaries (D12);
   (2) detect **alt-screen** enter/leave (`?1049h`/`?1049l`) to trigger
   passthrough; (3) emit output segments tagged with the current block;
-  (4) handle styling (preserve or strip for the block model). It does NOT
+  (4) **normalize captured output to clean printable text** — `vte` swallows
+  complete OSC/CSI/DCS escape sequences (so SGR styling and terminal
+  query/responses never leak as text), and the performer keeps only `\n` and
+  `\t`, mapping `\r\n` → `\n` and dropping bare `\r` and other C0 controls
+  (FR-001); (5) parse **OSC 7** (`file://host/abs-path`) cwd reports into a
+  `Boundary::Cwd` so the status rule follows `cd` (FR-019). It does NOT
   maintain a cell grid (D4).
 - **Session / Transcript model** — The source of truth: an ordered list of
   **blocks**. Each block: id, command text, start/end timestamps, captured
@@ -93,12 +99,19 @@ terminal via **passthrough**.
   the shell (D6). Handles the doubled-leader escape.
 - **Slash Command Registry** — Maps slash command names to handlers. MVP
   builtins: `/quit`, `/clear`, `/help`. Handlers receive an app context
-  (read State / blocks, write a new block, mutate UI). Designed so later
-  commands (`/save`, `/filter`, AI commands) and plugins slot in unchanged.
+  (read State / blocks, write a new block, mutate UI). `/exit` is an alias of
+  `/quit`. Designed so later commands (`/save`, `/filter`, AI commands) and
+  plugins slot in unchanged.
 - **TUI / Renderer** — Draws input pad, transcript pad, and status chrome
   from a read-only view of State. Translates key/resize events into App
   messages. Manages alt-screen handoff for passthrough. Crates: `ratatui`,
-  `crossterm`.
+  `crossterm`. The transcript is **borderless** (the renderer owns and clears
+  its full rectangle each frame), each command is echoed with a colorized
+  prompt glyph (`λ` by default; `prompt_char`/`prompt_color`), consecutive
+  blocks are separated by a blank line, and a single **status rule** sits
+  directly above the input pad carrying the cwd (always) and the last exit code
+  (only when non-zero). Color is suppressed under `NO_COLOR` (FR-005–FR-011,
+  FR-018).
 - **App / Event Loop** — Owns `State`, wires the layers, runs the main
   select loop (input events ⨉ PTY output ⨉ child-exit ⨉ ticks), and is the
   **panic boundary**: a panic is caught, the terminal is restored, and the
@@ -182,11 +195,18 @@ kapollo:
 1. Suspends block capture for the current block (marks it as having entered
    an interactive program).
 2. Switches the renderer to **passthrough**: the PTY's raw bytes are written
-   straight to the host terminal, and host terminal keystrokes are written
-   straight to the PTY. The host terminal's own emulator does all grid work
-   (D4) — kapollo draws no UI during this time.
-3. On alt-screen leave (`?1049l`), resumes the normal split UI and reopens
-   normal block capture.
+   straight to the host terminal, and host terminal input is written to the
+   PTY **verbatim**. During passthrough kapollo reads raw stdin bytes (stdin is
+   put in non-blocking mode) and forwards them unchanged rather than decoding
+   `KeyEvent`s, so terminal query/responses that arrive on stdin (OSC 11/10/4
+   background-color reports, Device Attributes, cursor-position) reach the
+   program intact instead of being mangled into spurious input (FR-012). The
+   host terminal's own emulator does all grid work (D4) — kapollo draws no UI
+   during this time.
+3. On alt-screen leave (`?1049l`), emits an explicit reset to the host (SGR
+   reset + show cursor) so no residual style or hidden cursor bleeds through,
+   restores blocking stdin, clears and repaints the split UI, and reopens
+   normal block capture (FR-013).
 
 PTY resize must be forwarded continuously so the inner program sees correct
 dimensions. (Whether the kapollo chrome is hidden entirely or the inner app
@@ -226,7 +246,10 @@ validate with `vim`/`less`/`top`.)
   running command), not kapollo itself.
 - **Leader char** (default `/`) as the first char of input enters
   **slash-mode**; a doubled leader escapes to a literal leader char (D6).
-- Scrolling keys navigate the transcript pad independently of the input pad.
+- Scrolling keys navigate the transcript pad independently of the input pad:
+  **PageUp/PageDown** scroll a page at a time and **Home/End** jump to the
+  oldest/newest output, all clamped; submitting a command re-pins the view to
+  the newest output (FR-021).
 - `\`-style shell line-continuation is deferred (needs per-shell parsing).
 
 ## 6. Concurrency Model
@@ -242,6 +265,14 @@ shared-mutable-state across threads; the PTY reader hands bytes to the loop
 via a channel. **Finalized (MVP):** a hand-rolled single-threaded event loop
 with a dedicated PTY-reader thread feeding an `std::sync::mpsc` channel — no
 async runtime (`tokio`) is used.
+
+Under heavy output the loop drains the PTY channel in **bounded passes** (a
+per-pass budget of ~256 KiB / 64 chunks) and polls for input without blocking
+while output is still backing up, so a multi-million-line flood completes near
+shell-native time and Ctrl-C is serviced promptly rather than starved
+(FR-014–FR-017). The ring buffer enforces its caps in amortized O(1): a running
+line count is maintained incrementally, overflow is trimmed in bulk, and a
+single push larger than the byte cap keeps only the tail.
 
 ## 7. Module / Crate Layout (proposed)
 

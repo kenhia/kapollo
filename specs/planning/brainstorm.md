@@ -3,7 +3,7 @@
 > Living notes. This is a conversation, not a spec. We iterate here, then
 > distill decisions into `specs/` and `docs/architecture.md`.
 
-Last updated: 2026-05-29 (decisions locked — see §9 Decisions Log)
+Last updated: 2026-05-30 (post-MVP user test → hardening sprint 002; D22–D24 added)
 
 ## 1. Vision
 
@@ -71,6 +71,10 @@ Tiered by how far from "shell wrapper" they push us.
 
 ### Tier 2 — Rich rendering & "special" slash commands
 - `/view file.md` → render markdown in the transcript (color + layout).
+- **Preserve & render ANSI SGR styling** (color, bold, etc.) emitted by the
+  wrapped command *in transcript blocks* — i.e. translate the program's own
+  color into styled cells, not just strip it (see D4/§6, which strip styling
+  for the MVP). Distinct from kapollo generating its own color (chrome/render).
 - Syntax-highlighted file preview, paged output.
 - Structured output capture (per-command blocks you can fold/copy/re-run).
 - Output filters/transforms (e.g. pipe last output through a slash command).
@@ -266,6 +270,24 @@ progress bars, in-place redraws). Instead:
 - **D21 — Active-session env var**: `kap` sets `KAPOLLO_ACTIVE=1` in the
   wrapped shell's environment so scripts/prompts can detect they run inside
   kapollo. (Likely also export a version var, e.g. `KAPOLLO_VERSION`.)
+- **D22 — Color scope (phased)**: kapollo's **own chrome** (the `λ` prompt
+  char, status line, `^C` hint) is colorized in the hardening sprint (002).
+  **Block ANSI passthrough** — preserving/rendering the wrapped program's own
+  SGR colors in transcript blocks — is explicitly deferred to **Tier 2** (new
+  bullet in §3). MVP/hardening still *strips* program styling per D4/§6.
+- **D23 — cwd tracking via shell hook (OSC 7)**: the cwd shown in the status
+  line comes from the shell emitting **OSC 7** (`ESC]7;file://host/abs/path ST`)
+  from the same prompt hook that emits OSC 133 (D12/D19), parsed in the
+  existing vte layer. We do NOT scrape cwd from rendered prompt text
+  (theme/shell-fragile, violates D2). Sentinel-fallback shells get no live
+  cwd for now (consistent with their degraded support); optional parity later.
+- **D24 — Transcript scrolling (keyboard-first)**: scrollback is
+  **keyboard-only** for now — PgUp/PgDn (and Home/End to jump), surfaced in
+  `/help`. **Mouse-wheel capture is deferred and will be opt-in** (config
+  `mouse = true`, default off) because capturing the mouse breaks the host
+  terminal's native click-drag text selection/copy — an unacceptable default
+  for a shell REPL. When added, capture must be disabled during alt-screen
+  passthrough so `vim`/`top` receive mouse events, and re-enabled on return.
 
 ### Scope boundaries (derived)
 - **MVP (Linux only)**: PTY-wrapped configurable shell; input/output pads;

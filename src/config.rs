@@ -3,7 +3,9 @@
 //! schema. Unknown keys are logged and ignored; out-of-range caps are clamped.
 
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
+use ratatui::style::Color;
 use serde::Deserialize;
 
 use crate::error::ConfigError;
@@ -12,12 +14,20 @@ use crate::error::ConfigError;
 pub const PER_BLOCK_BYTES_HARD_MAX: u64 = 64 * 1024 * 1024;
 
 const DEFAULT_LEADER_CHAR: char = '/';
+const DEFAULT_PROMPT_CHAR: char = 'λ';
+const DEFAULT_PROMPT_COLOR: Color = Color::Red;
 const DEFAULT_PER_BLOCK_BYTES: u64 = 1024 * 1024; // 1 MiB
 const DEFAULT_PER_BLOCK_LINES: u64 = 50_000;
 const DEFAULT_TRANSCRIPT_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
 const DEFAULT_TRANSCRIPT_BLOCKS: u64 = 1_000;
 
-const TOP_LEVEL_KEYS: &[&str] = &["shell", "leader_char", "caps"];
+const TOP_LEVEL_KEYS: &[&str] = &[
+    "shell",
+    "leader_char",
+    "prompt_char",
+    "prompt_color",
+    "caps",
+];
 const CAPS_KEYS: &[&str] = &[
     "per_block_bytes",
     "per_block_lines",
@@ -32,6 +42,11 @@ pub struct Config {
     pub shell: Option<String>,
     /// Leader character that begins a slash command.
     pub leader_char: char,
+    /// Prompt character echoed before each command (default `λ`; FR-010).
+    pub prompt_char: char,
+    /// Color applied to the prompt character when color is enabled
+    /// (default red; FR-011).
+    pub prompt_color: Color,
     /// Output retention caps.
     pub caps: Caps,
 }
@@ -50,6 +65,8 @@ impl Default for Config {
         Self {
             shell: None,
             leader_char: DEFAULT_LEADER_CHAR,
+            prompt_char: DEFAULT_PROMPT_CHAR,
+            prompt_color: DEFAULT_PROMPT_COLOR,
             caps: Caps::default(),
         }
     }
@@ -116,6 +133,8 @@ pub fn default_config_path() -> Option<PathBuf> {
 struct RawConfig {
     shell: Option<String>,
     leader_char: Option<String>,
+    prompt_char: Option<String>,
+    prompt_color: Option<String>,
     caps: Option<RawCaps>,
 }
 
@@ -144,6 +163,32 @@ impl RawConfig {
             None => DEFAULT_LEADER_CHAR,
         };
 
+        let prompt_char = match self.prompt_char {
+            Some(s) => {
+                let mut chars = s.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => c,
+                    _ => {
+                        return Err(ConfigError::Value(format!(
+                            "prompt_char must be exactly one character, got {s:?}"
+                        )))
+                    }
+                }
+            }
+            None => DEFAULT_PROMPT_CHAR,
+        };
+
+        let prompt_color = match self.prompt_color {
+            Some(s) => match Color::from_str(&s) {
+                Ok(color) => color,
+                Err(_) => {
+                    tracing::warn!(value = %s, "unknown prompt_color; using default");
+                    DEFAULT_PROMPT_COLOR
+                }
+            },
+            None => DEFAULT_PROMPT_COLOR,
+        };
+
         let defaults = Caps::default();
         let raw_caps = self.caps.unwrap_or_default();
         let mut caps = Caps {
@@ -169,6 +214,8 @@ impl RawConfig {
         Ok(Config {
             shell: self.shell,
             leader_char,
+            prompt_char,
+            prompt_color,
             caps,
         })
     }

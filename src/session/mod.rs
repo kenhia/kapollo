@@ -15,6 +15,11 @@ pub struct Transcript {
     blocks: Vec<Block>,
     caps: Caps,
     scroll_offset: usize,
+    /// View metrics recorded by the last render: the viewport height (used as
+    /// the page size) and the maximum scroll offset (the top of the content).
+    /// Interior mutability lets the immutable render path record them (FR-021).
+    viewport: std::cell::Cell<usize>,
+    max_scroll: std::cell::Cell<usize>,
     next_id: BlockId,
 }
 
@@ -25,6 +30,8 @@ impl Transcript {
             blocks: Vec::new(),
             caps,
             scroll_offset: 0,
+            viewport: std::cell::Cell::new(0),
+            max_scroll: std::cell::Cell::new(0),
             next_id: 1,
         }
     }
@@ -89,6 +96,40 @@ impl Transcript {
     /// Scroll the transcript down (toward newer output) by `n` lines (FR-014).
     pub fn scroll_down(&mut self, n: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(n);
+    }
+
+    /// Record the view metrics from the last render: the viewport height (the
+    /// page size) and the maximum scroll offset (the top of the content). Called
+    /// from the render path so the keyboard scroll commands can clamp (FR-021).
+    pub fn record_view(&self, viewport: usize, max_scroll: usize) {
+        self.viewport.set(viewport);
+        self.max_scroll.set(max_scroll);
+    }
+
+    /// Scroll up by one page (the recorded viewport height), clamped to the top
+    /// of the content (FR-021).
+    pub fn page_up(&mut self) {
+        let page = self.viewport.get().max(1);
+        self.scroll_offset = self
+            .scroll_offset
+            .saturating_add(page)
+            .min(self.max_scroll.get());
+    }
+
+    /// Scroll down by one page, clamped to the newest output (FR-021).
+    pub fn page_down(&mut self) {
+        let page = self.viewport.get().max(1);
+        self.scroll_offset = self.scroll_offset.saturating_sub(page);
+    }
+
+    /// Jump to the oldest retained output (FR-021).
+    pub fn scroll_to_top(&mut self) {
+        self.scroll_offset = self.max_scroll.get();
+    }
+
+    /// Jump back to the newest output (FR-021).
+    pub fn scroll_to_bottom(&mut self) {
+        self.scroll_offset = 0;
     }
 
     /// Total retained output bytes across all blocks.

@@ -141,6 +141,9 @@ impl OutputProcessor {
                 }
             }
             Boundary::PromptStart | Boundary::CommandStart => {}
+            // OSC 7 cwd updates are surfaced to the caller via the returned
+            // boundaries; they do not affect capture state (FR-019).
+            Boundary::Cwd(_) => {}
         }
     }
 }

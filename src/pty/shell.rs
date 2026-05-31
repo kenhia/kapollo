@@ -38,20 +38,25 @@ impl ShellKind {
 }
 
 /// fish integration: define `fish_preexec`/`fish_postexec` event functions that
-/// emit OSC 133 `C` (output start) and `D;<status>` (command end + exit code).
-/// User config is preserved because fish runs `--init-command` after config.
+/// emit OSC 133 `C` (output start) and `D;<status>` (command end + exit code),
+/// plus a `fish_prompt` hook that emits OSC 7 (`file://host/cwd`) so kapollo can
+/// follow `cd` (FR-019). User config is preserved because fish runs
+/// `--init-command` after config.
 const FISH_HOOK: &str = "function __kapollo_preexec --on-event fish_preexec; \
 printf '\\e]133;C\\e\\\\'; end; \
 function __kapollo_postexec --on-event fish_postexec; \
-set -l __kapollo_status $status; printf '\\e]133;D;%s\\e\\\\' $__kapollo_status; end";
+set -l __kapollo_status $status; printf '\\e]133;D;%s\\e\\\\' $__kapollo_status; end; \
+function __kapollo_cwd --on-event fish_prompt; \
+printf '\\e]7;file://%s%s\\e\\\\' (hostname) \"$PWD\"; end";
 
 /// bash integration sourced from a generated rcfile. Preserves the user's
 /// `~/.bashrc`, then arranges OSC 133 `C` via `PS0` (printed after a command is
-/// read, before it runs) and `D;<exit>` via `PROMPT_COMMAND` (run before each
-/// prompt, capturing the just-finished command's status).
+/// read, before it runs) and `D;<exit>` plus OSC 7 (`file://host/cwd`) via
+/// `PROMPT_COMMAND` (run before each prompt, capturing the just-finished
+/// command's status and reporting the working directory; FR-019).
 const BASH_HOOK: &str = "\
 [ -f ~/.bashrc ] && . ~/.bashrc
-__kapollo_cmd_end() { local __kapollo_e=$?; printf '\\e]133;D;%s\\e\\\\' \"$__kapollo_e\"; }
+__kapollo_cmd_end() { local __kapollo_e=$?; printf '\\e]133;D;%s\\e\\\\' \"$__kapollo_e\"; printf '\\e]7;file://%s%s\\e\\\\' \"${HOSTNAME:-localhost}\" \"$PWD\"; }
 PS0=$'\\e]133;C\\e\\\\'
 case \"${PROMPT_COMMAND:-}\" in
   *__kapollo_cmd_end*) ;;

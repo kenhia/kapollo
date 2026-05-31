@@ -5,7 +5,8 @@
 > per-feature source is [specs/001-mvp-repl/spec.md](../specs/001-mvp-repl/spec.md);
 > the technical reference is [architecture.md](architecture.md).
 
-Last updated: 2026-05-29 (MVP: US1–US4 implemented)
+Last updated: 2026-05-30 (MVP hardening 002: render normalization, borderless
+chrome, passthrough verbatim stdin, OSC 7 cwd, scrolling, flood responsiveness)
 
 ## 1. Overview
 
@@ -31,6 +32,9 @@ the host terminal via **passthrough**.
 - **FR-007** Auto-inject the shell-integration hook (fish/bash); other shells
   fall back to sentinel boundary detection.
 - **FR-008** Export `KAPOLLO_ACTIVE=1` and a version variable to the shell.
+- **FR-034** Normalize captured output to clean printable text: drop bare `\r`
+  and other C0 controls, map `\r\n` → `\n`, and never leak OSC/CSI/DCS escape
+  sequences or terminal query/responses as visible text.
 
 ### Input pad & history
 - **FR-009** Submit the input pad contents on Enter.
@@ -39,24 +43,34 @@ the host terminal via **passthrough**.
 - **FR-012** Auto-grow the input pad up to a height cap, then scroll internally.
 - **FR-013** Maintain kapollo's own input history (separate from the shell's),
   recalled with Up/Down.
-- **FR-014** Scroll the transcript independently of the input pad.
+- **FR-014** Scroll the transcript independently of the input pad: PageUp/
+  PageDown by a page and Home/End to the oldest/newest output (clamped);
+  submitting a command re-pins the view to the newest output.
 
 ### Output retention
 - **FR-015** Retain captured output bytes per block.
 - **FR-016** Enforce configurable per-block and whole-transcript caps with a
   visible truncation marker; oldest output/blocks evicted first.
+- **FR-035** Stay responsive and interruptible under huge output: a multi-
+  million-line flood completes near shell-native time (amortized O(1) cap
+  enforcement, bounded per-pass draining) and Ctrl-C interrupts promptly.
 
 ### Resize & passthrough
 - **FR-017** Reflow both pads on terminal resize without losing transcript.
 - **FR-018** Detect alt-screen entry and hand the full terminal to the program.
 - **FR-019** Forward resize to the wrapped program during passthrough.
 - **FR-020** Restore the split-pad UI with the transcript intact on exit.
+- **FR-036** Forward stdin to the program verbatim during passthrough (no
+  `KeyEvent` re-encoding) so terminal query/responses (OSC 11/10/4, DA, cursor
+  position) reach it intact; emit an explicit SGR/cursor reset on exit so no
+  residual style or hidden cursor bleeds into the restored UI.
 
 ### Slash commands
 - **FR-021** Treat leader-char-prefixed input as a slash command; pass the rest
   through to the shell.
 - **FR-022** Doubled leader escapes to a literal leader char passed to the shell.
-- **FR-023** Provide at least `/quit`, `/clear`, and `/help`.
+- **FR-023** Provide at least `/quit`, `/clear`, and `/help` (with `/exit` as an
+  alias of `/quit`).
 
 ### Signals, safety & teardown
 - **FR-024** Forward Ctrl-C (SIGINT) to the running command, not kapollo.
@@ -67,8 +81,8 @@ the host terminal via **passthrough**.
 ### Configuration, logging & environment
 - **FR-028** Read `~/.config/kapollo/config.toml` if present; sensible defaults
   otherwise.
-- **FR-029** Make output caps, the leader char, and the wrapped shell
-  configurable.
+- **FR-029** Make output caps, the leader char, the wrapped shell, and the
+  prompt glyph/color (`prompt_char`/`prompt_color`) configurable.
 - **FR-030** Write logs to a file sink, never to the TUI; quiet by default,
   opt-in verbose.
 - **FR-031** Honor `NO_COLOR` for kapollo's own chrome.
@@ -76,6 +90,11 @@ the host terminal via **passthrough**.
 
 ### Status chrome
 - **FR-033** Show at least the current working directory and last exit code.
+- **FR-037** Render a borderless transcript with a colorized prompt glyph (`λ`)
+  echoing each command and a blank line between blocks; carry the cwd (always,
+  following `cd` via OSC 7) and the last exit code (only when non-zero) on a
+  single status rule directly above the input pad. Color is suppressed under
+  `NO_COLOR`.
 
 ## 3. Key Entities
 

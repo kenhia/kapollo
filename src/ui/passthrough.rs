@@ -16,6 +16,75 @@ pub fn write_output(bytes: &[u8]) -> io::Result<()> {
     out.flush()
 }
 
+/// Forward raw terminal input to the child verbatim during passthrough.
+///
+/// Unlike [`encode_key`], this performs no `KeyEvent` decoding/re-encoding, so
+/// terminal query responses that arrive on stdin (e.g. an OSC 11
+/// background-color report, a cursor-position report, or a Device Attributes
+/// reply) reach the program intact instead of being mangled into spurious
+/// visible input (FR-012).
+pub fn forward_stdin(raw: &[u8]) -> &[u8] {
+    raw
+}
+
+/// Explicit reset emitted to the host terminal when a full-screen program
+/// leaves the alternate screen, before the split-pad UI is repainted (FR-013):
+/// an SGR reset so no residual style bleeds through, and a show-cursor so a
+/// program that hid the cursor cannot leave it hidden.
+pub const RESET_SEQUENCE: &[u8] = b"\x1b[0m\x1b[?25h";
+
+/// Emit [`RESET_SEQUENCE`] to stdout when leaving passthrough (FR-013).
+pub fn reset_on_exit() -> io::Result<()> {
+    let mut out = io::stdout();
+    out.write_all(RESET_SEQUENCE)?;
+    out.flush()
+}
+
+/// Toggle non-blocking mode on stdin so the passthrough loop can drain whatever
+/// the terminal has sent without blocking, then hand it to the child verbatim
+/// (FR-012). Enabled on entering passthrough and cleared on leaving so the
+/// normal split-pad event reader keeps its blocking semantics.
+#[cfg(unix)]
+pub fn set_stdin_nonblocking(enable: bool) -> io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+    let fd = io::stdin().as_raw_fd();
+    // SAFETY: `fd` is the live stdin descriptor; fcntl with F_GETFL/F_SETFL only
+    // reads and writes the descriptor's status flags.
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let new = if enable {
+            flags | libc::O_NONBLOCK
+        } else {
+            flags & !libc::O_NONBLOCK
+        };
+        if libc::fcntl(fd, libc::F_SETFL, new) < 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn set_stdin_nonblocking(_enable: bool) -> io::Result<()> {
+    Ok(())
+}
+
+/// Read whatever bytes are currently available on stdin without blocking,
+/// returning the number read (0 when nothing is pending). Requires stdin to be
+/// in non-blocking mode (see [`set_stdin_nonblocking`]); used by the passthrough
+/// loop to forward terminal input verbatim (FR-012).
+pub fn read_available_stdin(buf: &mut [u8]) -> io::Result<usize> {
+    use std::io::Read;
+    match io::stdin().lock().read(buf) {
+        Ok(n) => Ok(n),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(0),
+        Err(e) => Err(e),
+    }
+}
+
 /// Encode a key event into the byte sequence a terminal would send to the
 /// program over the PTY. Returns `None` for keys with no passthrough mapping.
 pub fn encode_key(key: KeyEvent) -> Option<Vec<u8>> {
