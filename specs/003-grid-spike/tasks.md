@@ -29,11 +29,11 @@ one-line workspace `exclude`.
 
 **Purpose**: Stand up the isolated `delos/` workspace; guarantee shipping-crate isolation.
 
-- [ ] T001 Add `[workspace] exclude = ["delos"]` to the root [Cargo.toml](../../Cargo.toml) so `cargo build`/`cargo test` at the repo root never descend into the spike (FR-003/FR-004); confirm root `cargo build && cargo test` still pass.
-- [ ] T002 Create `delos/Cargo.toml` as a standalone workspace (`resolver = "2"`, members `spike-support`, `spike-vt100`, `spike-alacritty`, `spike-wezterm`; `[workspace.dependencies]` ratatui 0.30, crossterm 0.29, portable-pty 0.9, arboard 3.6) per [quickstart.md](quickstart.md) §1.
-- [ ] T003 Scaffold the four crates in `delos/`: `cargo new --lib spike-support`, `cargo new --bin spike-vt100`, `cargo new --bin spike-alacritty`, `cargo new --bin spike-wezterm`.
-- [ ] T004 [P] Add `delos/README.md` describing what delos is, how to run each stage, and linking back to [spec.md](spec.md) and [03-spike-plan.md](../planning/grid-pivot/03-spike-plan.md).
-- [ ] T005 [P] Create the empty deliverable docs under `delos/docs/`: `scorecard.md` (seed with the rubric template from [contracts/scorecard.md](contracts/scorecard.md)), `s1-vt100.md`, `s2-alacritty.md`, `s3-wezterm.md`, `recommendation.md`.
+- [x] T001 Add `[workspace] exclude = ["delos"]` to the root [Cargo.toml](../../Cargo.toml) so `cargo build`/`cargo test` at the repo root never descend into the spike (FR-003/FR-004); confirm root `cargo build && cargo test` still pass.
+- [x] T002 Create `delos/Cargo.toml` as a standalone workspace (`resolver = "2"`, members `spike-support`, `spike-vt100`, `spike-alacritty`, `spike-wezterm`; `[workspace.dependencies]` ratatui 0.30, crossterm 0.29, portable-pty 0.9, arboard 3.6) per [quickstart.md](quickstart.md) §1.
+- [x] T003 Scaffold the four crates in `delos/`: `cargo new --lib spike-support`, `cargo new --bin spike-vt100`, `cargo new --bin spike-alacritty`, `cargo new --bin spike-wezterm`.
+- [x] T004 [P] Add `delos/README.md` describing what delos is, how to run each stage, and linking back to [spec.md](spec.md) and [03-spike-plan.md](../planning/grid-pivot/03-spike-plan.md).
+- [x] T005 [P] Create the empty deliverable docs under `delos/docs/`: `scorecard.md` (seed with the rubric template from [contracts/scorecard.md](contracts/scorecard.md)), `s1-vt100.md`, `s2-alacritty.md`, `s3-wezterm.md`, `recommendation.md`.
 
 **Checkpoint**: `cd delos && cargo build` succeeds (empty crates); root crate still green and `cargo tree` at root shows no spike deps.
 
@@ -47,14 +47,14 @@ this is done.**
 
 **⚠️ TDD REQUIRED here**: write the failing test first, then implement, for each pure helper.
 
-- [ ] T006 Configure `delos/spike-support/Cargo.toml`: depend on `portable-pty.workspace = true`, `arboard.workspace = true`, and `base64 = "0.22"` (for OSC 52 framing in T011).
-- [ ] T007 [P] Selection coordinate math (TDD) in `delos/spike-support/src/coords.rs`: write failing unit tests then implement `screen_to_content(top_row, screen_y) -> abs_row` + inverse with output-region clamping (FR-008/FR-009, R5).
-- [ ] T008 [P] Auto-scroll math (TDD) in `delos/spike-support/src/coords.rs`: failing tests then `auto_scroll(top_row, drag_y, height, history_len) -> top_row'` — up when `drag_y < 0`, down when `drag_y >= height`, clamp `[0, history_len-height]` (FR-010, R5).
-- [ ] T009 [P] Selection normalization (TDD) in `delos/spike-support/src/coords.rs`: failing tests then `normalize(anchor, end) -> (start, end)` yielding document order for copy (FR-016).
-- [ ] T010 [P] Mode detector (TDD) in `delos/spike-support/src/modes.rs`: failing tests then `detect_mode(&[u8]) -> Vec<ModeEvent>` recognizing alt-screen `?1049h/l` (+ legacy `?47`,`?1047`) and child mouse modes `?1000/1002/1003/1006 h/l` (FR-013/FR-014, R4).
-- [ ] T011 [P] OSC 52 framing (TDD) in `delos/spike-support/src/clipboard.rs`: failing tests then `osc52_frame(&[u8]) -> String` producing `ESC ] 52 ; c ; <base64> ST` (FR-020, R3); plus an optional `arboard` fallback `copy_local(&str)` (FR-021).
-- [ ] T012 PTY plumbing in `delos/spike-support/src/pty.rs`: `spawn_shell_pty(shell) -> PtyShell` using portable-pty (reader thread → byte channel, writer handle, resize propagation), mirroring kapollo's approach but self-contained (R7). No unit test (I/O boundary); smoke-validated via the first stage.
-- [ ] T013 Re-export the public surface in `delos/spike-support/src/lib.rs` (`coords`, `modes`, `clipboard`, `pty`) and run the `spike-support` gate: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` (all helper tests green).
+- [x] T006 Configure `delos/spike-support/Cargo.toml`: depend on `portable-pty.workspace = true`, `arboard.workspace = true`, and `base64 = "0.22"` (for OSC 52 framing in T011).
+- [x] T007 [P] Selection coordinate math (TDD) in `delos/spike-support/src/coords.rs`: write failing unit tests then implement `screen_to_content(top_row, screen_y) -> abs_row` + inverse with output-region clamping (FR-008/FR-009, R5).
+- [x] T008 [P] Auto-scroll math (TDD) in `delos/spike-support/src/coords.rs`: failing tests then `auto_scroll(top_row, drag_y, height, history_len) -> top_row'` — up when `drag_y < 0`, down when `drag_y >= height`, clamp `[0, history_len-height]` (FR-010, R5).
+- [x] T009 [P] Selection normalization (TDD) in `delos/spike-support/src/coords.rs`: failing tests then `normalize(anchor, end) -> (start, end)` yielding document order for copy (FR-016).
+- [x] T010 [P] Mode detector (TDD) in `delos/spike-support/src/modes.rs`: failing tests then `detect_mode(&[u8]) -> Vec<ModeEvent>` recognizing alt-screen `?1049h/l` (+ legacy `?47`,`?1047`) and child mouse modes `?1000/1002/1003/1006 h/l` (FR-013/FR-014, R4).
+- [x] T011 [P] OSC 52 framing (TDD) in `delos/spike-support/src/clipboard.rs`: failing tests then `osc52_frame(&[u8]) -> String` producing `ESC ] 52 ; c ; <base64> ST` (FR-020, R3); plus an optional `arboard` fallback `copy_local(&str)` (FR-021).
+- [x] T012 PTY plumbing in `delos/spike-support/src/pty.rs`: `spawn_shell_pty(shell) -> PtyShell` using portable-pty (reader thread → byte channel, writer handle, resize propagation), mirroring kapollo's approach but self-contained (R7). No unit test (I/O boundary); smoke-validated via the first stage.
+- [x] T013 Re-export the public surface in `delos/spike-support/src/lib.rs` (`coords`, `modes`, `clipboard`, `pty`) and run the `spike-support` gate: `cargo fmt --check && cargo clippy -- -D warnings && cargo test` (all helper tests green).
 
 **Checkpoint**: `spike-support` compiles, all pure-helper unit tests pass, gate clean. User-story stages can now begin.
 
