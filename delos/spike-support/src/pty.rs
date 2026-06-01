@@ -9,6 +9,8 @@ use std::thread;
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 
+pub use portable_pty::PtySize as PtySizeReexport;
+
 /// A running shell attached to a PTY. Output bytes arrive on `output`; input is sent
 /// via [`PtyShell::write`]; the window can be resized with [`PtyShell::resize`].
 pub struct PtyShell {

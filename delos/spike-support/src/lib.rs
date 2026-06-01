@@ -11,4 +11,4 @@ pub mod pty;
 pub use clipboard::{copy_local, osc52_frame};
 pub use coords::{auto_scroll, content_to_screen, normalize, screen_to_content, Cell};
 pub use modes::{detect_mode, ModeEvent};
-pub use pty::PtyShell;
+pub use pty::{PtyShell, PtySizeReexport as PtySize};

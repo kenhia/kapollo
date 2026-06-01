@@ -41,7 +41,7 @@ spike-<crate> [SHELL]
 
 | Event | No active selection | Active selection |
 |-------|---------------------|------------------|
-| left-press (no Shift) | begin drag (set anchor) → Dragging | begin **new** drag (replaces) |
+| left-press (no Shift) | begin drag (set anchor) → Dragging | **cancel selection → Idle** (FR-018; no copy) |
 | left-press (Shift) | forward to child (FR-017) | forward to child |
 | mouse-move while pressed | extend selection; auto-scroll past edge (FR-010) | — |
 | release | **no action** — if a drag was in progress it finalizes to Active and the highlight stays; nothing is copied | — (selection unchanged) |
