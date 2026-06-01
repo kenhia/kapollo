@@ -132,8 +132,8 @@ rationale + feasibility confirmation — the spike's reason for existing.
 **Independent Test**: Review `recommendation.md`; confirm it names exactly one crate,
 cites weighted-rubric evidence, and states selection + alt-screen feasibility.
 
-- [ ] T037 [US4] Verify scorecard completeness: every one of the 12 criteria has an entry in all three columns; fill any gaps with explicit `-`/`n/a` + note (SC-001).
-- [ ] T038 [US4] Write `delos/docs/recommendation.md`: name exactly one production crate with rationale weighted by the rubric (SC-003); explicitly confirm or refute that the content-coord selection model and alt-screen handover are achievable (SC-004/SC-005); state how the outputs feed D25–D30 and the in-place rework spec (FR-027).
+- [x] T037 [US4] Verify scorecard completeness: every one of the 12 criteria has an entry in all three columns; fill any gaps with explicit `-`/`n/a` + note (SC-001).
+- [x] T038 [US4] Write `delos/docs/recommendation.md`: name exactly one production crate with rationale weighted by the rubric (SC-003); explicitly confirm or refute that the content-coord selection model and alt-screen handover are achievable (SC-004/SC-005); state how the outputs feed D25–D30 and the in-place rework spec (FR-027).
 
 **Checkpoint**: Recommendation written; spike's decision output ready to promote.
 
@@ -144,8 +144,8 @@ cites weighted-rubric evidence, and states selection + alt-screen feasibility.
 **Purpose**: Cross-stage validation and final hygiene.
 
 - [ ] T039 Complete the host-terminal matrix ([quickstart.md](quickstart.md) §5): run the slice in Windows Terminal Preview (primary) + at least one of GNOME Terminal/Konsole (secondary); record per-terminal OSC 52 honor in `delos/docs/scorecard.md` or the writeups (SC-006/FR-026).
-- [ ] T040 [P] Final isolation + green gate: at repo root confirm `cargo tree` shows zero spike deps and `cargo build && cargo test` pass; in `delos/` run `cargo fmt --check && cargo clippy -- -D warnings && cargo test` clean (SC-007).
-- [ ] T041 [P] Update `delos/README.md` with final run instructions and a one-line pointer to `recommendation.md`; ensure the planning docs' decks-clearing/next-step section reflects that the spike is complete.
+- [x] T040 [P] Final isolation + green gate: at repo root confirm `cargo tree` shows zero spike deps and `cargo build && cargo test` pass; in `delos/` run `cargo fmt --check && cargo clippy -- -D warnings && cargo test` clean (SC-007).
+- [x] T041 [P] Update `delos/README.md` with final run instructions and a one-line pointer to `recommendation.md`; ensure the planning docs' decks-clearing/next-step section reflects that the spike is complete.
 
 ---
 

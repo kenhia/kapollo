@@ -17,11 +17,14 @@ stage fills one column of the shared scorecard; the synthesis picks one crate.
 
 | Stage | Crate | Binary | Status |
 |-------|-------|--------|--------|
-| S1 | `vt100` (+ optional `tui-term`) | `spike-vt100` | scaffolded |
-| S2 | `alacritty_terminal` | `spike-alacritty` | scaffolded |
-| S3 | `wezterm-term` (git pin) | `spike-wezterm` | scaffolded |
+| S1 | `vt100` (+ optional `tui-term`) | `spike-vt100` | complete |
+| S2 | `alacritty_terminal` | `spike-alacritty` | complete |
+| S3 | `wezterm-term` (git pin) | `spike-wezterm` | complete |
 
 Shared plumbing + unit-tested pure helpers live in `spike-support`.
+
+**Outcome:** recommendation is **`wezterm-term`** (fallback `alacritty_terminal`) —
+see [docs/recommendation.md](docs/recommendation.md).
 
 ## How to run
 
@@ -32,11 +35,11 @@ cargo run -p spike-alacritty    # S2
 cargo run -p spike-wezterm      # S3
 ```
 
-Run the `spike-support` gate:
+Run the full workspace gate (all stages):
 
 ```fish
 cd delos
-cargo fmt --check; and cargo clippy -- -D warnings; and cargo test
+cargo fmt --check; and cargo clippy --all-targets -- -D warnings; and cargo test
 ```
 
 ## Deliverables
