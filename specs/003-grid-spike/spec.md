@@ -132,7 +132,7 @@ the selection model + alt-screen handover are achievable.
 
 ### Edge Cases
 
-- **Selection vs. SIGINT (Ctrl-C) conflict**: With **no active selection**, `Ctrl-C` must send SIGINT to the child (unchanged from FR-024) and right-click must open the context menu. With an **active selection**, `Ctrl-C` copies and right-click copies. State (selection active?) disambiguates.
+- **Selection vs. SIGINT (Ctrl-C) conflict**: With **no active selection**, `Ctrl-C` must send SIGINT to the child (unchanged from kapollo's **002** FR-024 — Ctrl-C→SIGINT) and right-click must open the context menu. With an **active selection**, `Ctrl-C` copies and right-click copies. State (selection active?) disambiguates.
 - **Shift held during mouse interaction**: Shift bypasses kapollo's selection and forwards the mouse event to the child app (native escape hatch).
 - **Drag-past-edge in both directions**: Auto-scroll must work pulling the drag below the bottom edge *and* above the top edge, extending the range either way.
 - **Selection survives scrolling**: Because the anchor is in content (scrollback row/col) coordinates, scrolling away and back must not lose or shift the selection.
@@ -161,17 +161,17 @@ the selection model + alt-screen handover are achievable.
 - **FR-008**: Each spike binary MUST support mouse click-drag text selection with the selection anchored in **content coordinates** (scrollback row/col), so the selection survives scrolling.
 - **FR-009**: The selection MUST be scoped to the output region (a selection started in the output region stays there).
 - **FR-010**: When a drag passes the top or bottom edge of the viewport, the view MUST auto-scroll in that direction (both directions supported) and extend the selection range.
-- **FR-011**: On mouse release with an active selection, the selected text MUST be copied to the clipboard.
+- **FR-011**: On mouse release, an in-progress drag MUST finalize into an Active selection that stays highlighted; release MUST NOT itself copy. Copying the selection happens only via an explicit trigger while a selection is Active (right-press or `Ctrl-C`, per FR-016), each of which copies and then deselects.
 - **FR-012**: The mouse wheel MUST scroll the scrollback.
 - **FR-013**: When the child enters the alternate screen (`?1049h`), the spike MUST stop owning the grid and pass through input/output so alt-screen apps (e.g. `vi`, `bpytop`) work, and MUST restore its own handling cleanly on alt-screen exit (`?1049l`).
 - **FR-014**: When the child requests mouse reporting on the main screen (CSI ?1000/1002/1003/1006h), the spike MUST forward mouse events to the child rather than consume them for selection.
 
 #### Selection copy-trigger & routing rules
 
-- **FR-015**: With **no active selection**, right-click MUST open a context menu and `Ctrl-C` MUST send SIGINT to the child (unchanged, preserving kapollo FR-024 behavior).
-- **FR-016**: With an **active selection**, right-click MUST copy the selection and `Ctrl-C` MUST copy the selection.
+- **FR-015**: With **no active selection**, right-click MUST open a context menu and `Ctrl-C` MUST send SIGINT to the child (unchanged, preserving kapollo's **002** FR-024 behavior — Ctrl-C→SIGINT; distinct from this spec's FR-024 below).
+- **FR-016**: With an **active selection**, right-click MUST copy the selection and then deselect; `Ctrl-C` MUST likewise copy the selection and then deselect.
 - **FR-017**: Holding **Shift** during a mouse interaction MUST bypass kapollo's selection and forward the mouse event to the child app.
-- **FR-018**: Selection termination MUST support: a second left-click OR `ESC` to cancel; mouse release or right-click (with selection active) to finalize.
+- **FR-018**: Selection termination MUST support: mouse **release** finalizes an in-progress drag into an Active (highlighted) selection; a second left-click OR `ESC` cancels an Active selection without copying; right-click or `Ctrl-C` on an Active selection copies and deselects (FR-016).
 - **FR-019**: The context menu in the spike MUST be a trivial "Hello, World." menu that only proves render + route; the real menu entries are **deferred to the rework**.
 
 #### Clipboard
@@ -208,7 +208,7 @@ the selection model + alt-screen handover are achievable.
 - **SC-001**: All three scorecard columns are fully filled — every listed rubric criterion has an entry for S1, S2, and S3.
 - **SC-002**: Each of the three stages has a written nuts-and-bolts writeup.
 - **SC-003**: Exactly one production crate is recommended, with rationale tied to the weighted rubric.
-- **SC-004**: The selection model (content-coordinate anchor, output-region scope, auto-scroll-on-drag-past-edge both directions, copy-on-release) is demonstrated working on at least one crate, and its achievability is explicitly confirmed or refuted in writing.
+- **SC-004**: The selection model (content-coordinate anchor, output-region scope, auto-scroll-on-drag-past-edge both directions, finalize-on-release with explicit copy via right-press/Ctrl-C) is demonstrated working on at least one crate, and its achievability is explicitly confirmed or refuted in writing.
 - **SC-005**: Alt-screen handover (enter → pass through, exit → restore) is demonstrated working on at least one crate with an alt-screen app such as `vi` or `bpytop`.
 - **SC-006**: The slice is validated on Windows Terminal Preview (primary) and on at least one secondary Ubuntu terminal (GNOME Terminal or Konsole), with OSC 52 clipboard support recorded per terminal.
 - **SC-007**: The shipping `kapollo`/`kap` build and its existing test suite remain green throughout, and the shipping dependency graph gains zero spike dependencies (verifiable via the lockfile/dependency graph).
