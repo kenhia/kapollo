@@ -93,12 +93,12 @@ active selection, and SIGINT when no selection. Fill the S1 scorecard column.
 [quickstart.md](quickstart.md) §4 script; confirm identical observable behaviors;
 fill the S2 scorecard column + writeup.
 
-- [ ] T024 [US2] Add S2 deps to `delos/spike-alacritty/Cargo.toml`: `spike-support` (path), `ratatui.workspace`, `crossterm.workspace`, `alacritty_terminal = "0.26"`.
-- [ ] T025 [US2] Port the S1 binary shell into `delos/spike-alacritty/src/main.rs` + `selection.rs`: reuse `spike-support` helpers and the same terminal lifecycle/routing/selection/copy/menu/scroll wiring (T015–T021), swapping the grid model to `alacritty_terminal`'s `Term`/`Grid` parser and its scrollback (FR-005…FR-021).
-- [ ] T026 [US2] Map `alacritty_terminal` cells → ratatui styled spans; cross-check its native alt-screen flag against `spike_support::modes` and note discrepancies (R4).
+- [x] T024 [US2] Add S2 deps to `delos/spike-alacritty/Cargo.toml`: `spike-support` (path), `ratatui.workspace`, `crossterm.workspace`, `alacritty_terminal = "0.26"`.
+- [x] T025 [US2] Port the S1 binary shell into `delos/spike-alacritty/src/main.rs` + `selection.rs`: reuse `spike-support` helpers and the same terminal lifecycle/routing/selection/copy/menu/scroll wiring (T015–T021), swapping the grid model to `alacritty_terminal`'s `Term`/`Grid` parser and its scrollback (FR-005…FR-021).
+- [x] T026 [US2] Map `alacritty_terminal` cells → ratatui styled spans; cross-check its native alt-screen flag against `spike_support::modes` and note discrepancies (R4).
 - [ ] T027 [US2] Under output flood ([quickstart.md](quickstart.md) §4 step 10) record `alacritty_terminal` damage/dirty-tracking behavior and responsiveness (scorecard criterion 8).
-- [ ] T028 [US2] Run the manual script for S2; write `delos/docs/s2-alacritty.md` (noting surprises vs S1) and fill the **S2 column** of `delos/docs/scorecard.md` (SC-001/SC-002).
-- [ ] T029 [US2] Isolation check at repo root (as T023); confirm shipping graph still has zero spike deps and stays green (SC-007).
+- [x] T028 [US2] Run the manual script for S2; write `delos/docs/s2-alacritty.md` (noting surprises vs S1) and fill the **S2 column** of `delos/docs/scorecard.md` (SC-001/SC-002).
+- [x] T029 [US2] Isolation check at repo root (as T023); confirm shipping graph still has zero spike deps and stays green (SC-007).
 
 **Checkpoint**: S1 and S2 slices both runnable independently; two scorecard columns filled.
 
