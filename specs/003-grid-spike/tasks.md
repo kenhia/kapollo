@@ -112,13 +112,13 @@ hyperlinks, optional images) and weigh its extra fidelity against its weight/API
 **Independent Test**: Run `cargo run -p spike-wezterm` through the same script; probe
 grapheme segmentation + OSC 8; image forwarding as a cherry; fill the S3 column.
 
-- [ ] T030 [US3] Pin `wezterm-term` as a git dep in `delos/spike-wezterm/Cargo.toml` (`git = "https://github.com/wezterm/wezterm.git", rev = "<latest green tag>"`); record the exact `rev` in `delos/docs/s3-wezterm.md` (R1). Add `spike-support`, `ratatui.workspace`, `crossterm.workspace`.
-- [ ] T031 [US3] Port the slice into `delos/spike-wezterm/src/main.rs` + `selection.rs` reusing `spike-support`, swapping the grid model to `wezterm-term`'s `Terminal`/`Screen` (termwiz cells) (FR-005…FR-021).
-- [ ] T032 [US3] Map `wezterm-term` cells → ratatui styled spans; record grapheme/Unicode segmentation and wide/combining-char fidelity (scorecard criteria 1–2).
-- [ ] T033 [US3] Probe OSC 8 hyperlink parsing/exposure (criterion 6) and record build-weight/compile-time (criterion 10) given the large wezterm transitive tree.
-- [ ] T034 [US3] **Cherry (easy-cut, FR-028)**: time-boxed probe of whether an image protocol (sixel/kitty/iTerm) can be forwarded through the owned grid; record achievable/not without spending multiple days; MUST NOT gate the decision.
-- [ ] T035 [US3] Run the manual script for S3; write `delos/docs/s3-wezterm.md` and fill the **S3 column** of `delos/docs/scorecard.md` (SC-001/SC-002).
-- [ ] T036 [US3] Isolation check at repo root (as T023); confirm the heavy wezterm/termwiz tree never entered the shipping graph (SC-007).
+- [x] T030 [US3] Pin `wezterm-term` as a git dep in `delos/spike-wezterm/Cargo.toml` (`git = "https://github.com/wezterm/wezterm.git", rev = "<latest green tag>"`); record the exact `rev` in `delos/docs/s3-wezterm.md` (R1). Add `spike-support`, `ratatui.workspace`, `crossterm.workspace`.
+- [x] T031 [US3] Port the slice into `delos/spike-wezterm/src/main.rs` + `selection.rs` reusing `spike-support`, swapping the grid model to `wezterm-term`'s `Terminal`/`Screen` (termwiz cells) (FR-005…FR-021).
+- [x] T032 [US3] Map `wezterm-term` cells → ratatui styled spans; record grapheme/Unicode segmentation and wide/combining-char fidelity (scorecard criteria 1–2).
+- [x] T033 [US3] Probe OSC 8 hyperlink parsing/exposure (criterion 6) and record build-weight/compile-time (criterion 10) given the large wezterm transitive tree.
+- [x] T034 [US3] **Cherry (easy-cut, FR-028)**: time-boxed probe of whether an image protocol (sixel/kitty/iTerm) can be forwarded through the owned grid; record achievable/not without spending multiple days; MUST NOT gate the decision.
+- [x] T035 [US3] Run the manual script for S3; write `delos/docs/s3-wezterm.md` and fill the **S3 column** of `delos/docs/scorecard.md` (SC-001/SC-002).
+- [x] T036 [US3] Isolation check at repo root (as T023); confirm the heavy wezterm/termwiz tree never entered the shipping graph (SC-007).
 
 **Checkpoint**: All three scorecard columns filled; three writeups complete.
 
