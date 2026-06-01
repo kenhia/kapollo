@@ -28,7 +28,8 @@ published to crates.io** (docs.rs 404s), so it must be consumed as a git depende
 This is the headline difference. `wezterm-term` does **not** track a display-scroll
 position itself (the embedding app owns `scroll_offset`), but in exchange it exposes a
 **true absolute row id**: `StableRowIndex`. It counts from the top of all history, grows
-downward, and *survives scrollback eviction*.
+downward, and *survives scrollback eviction*. (Why this matters, and what its absence
+costs S1/S2: [stable-row-index.md](stable-row-index.md).)
 
 - S1 (`vt100`) and S2 (`alacritty_terminal`) both expose only a **bottom-relative**
   scroll position, so we faked absolute ids with the `top_row = BASE - scroll` hack.

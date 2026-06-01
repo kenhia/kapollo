@@ -27,7 +27,7 @@ Scoring only the six high-weight criteria (`++`=2, `+`=1, `~`=0, `-`=−1):
 
 - **`wezterm-term` wins on every high-weight axis that matters to kapollo's roadmap.** Its
   decisive advantage is **`StableRowIndex`** — a *true absolute* row id that survives
-  scrollback eviction. S1 and S2 only expose a bottom-relative scroll position, forcing the
+  scrollback eviction (deep-dive: [stable-row-index.md](stable-row-index.md)). S1 and S2 only expose a bottom-relative scroll position, forcing the
   `top_row = BASE − scroll` fiction; wezterm hands us the real absolute id directly. That
   property is exactly what a **drift-free selection** and a **durable `/save`** want, and it
   is the highest-leverage differentiator in the whole rubric. Grapheme/wide-char

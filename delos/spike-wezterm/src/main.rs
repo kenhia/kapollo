@@ -29,6 +29,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use crossterm::cursor::MoveTo;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -46,7 +47,7 @@ use ratatui::Terminal as RatTerminal;
 use spike_support::coords::{content_to_screen, screen_to_content, Cell};
 use spike_support::{copy_local, detect_mode, modes::ModeEvent, osc52_frame, PtyShell, PtySize};
 
-use wezterm_term::color::{ColorPalette, SrgbaTuple};
+use wezterm_term::color::{ColorAttribute, ColorPalette, SrgbaTuple};
 use wezterm_term::{
     CellAttributes, Intensity, Terminal, TerminalConfiguration, TerminalSize, Underline,
 };
@@ -327,7 +328,6 @@ fn build_viewport(
     let top_phys = len.saturating_sub(phys + off);
     let top_row = screen.phys_to_stable_row_index(top_phys).max(0) as usize;
     let lines = screen.lines_in_phys_range(top_phys..top_phys + phys);
-    let palette = term.palette();
 
     let mut grid = vec![vec![(" ".to_string(), Style::default()); width]; height];
     for (y, line) in lines.iter().enumerate().take(height) {
@@ -342,7 +342,7 @@ fn build_viewport(
             } else {
                 s.to_string()
             };
-            grid[y][x] = (sym, cell_style(cell.attrs(), &palette));
+            grid[y][x] = (sym, cell_style(cell.attrs()));
         }
     }
     (top_row, grid)
@@ -547,14 +547,44 @@ fn draw(
             frame.render_widget(menu_widget, rect);
         }
     })?;
+    emit_status_hyperlink(rows)?;
+    Ok(())
+}
+
+/// Paint a single clickable OSC 8 hyperlink on the bottom row, re-emitted each frame so it
+/// survives ratatui's redraw. Quick eyeball check that links round-trip to the host
+/// terminal (the crate-level model side is `attrs.hyperlink()`); not a kapollo feature.
+fn emit_status_hyperlink(rows: u16) -> Result<()> {
+    let mut out = io::stdout();
+    let link = spike_support::osc8(
+        "https://github.com/kenhia/kapollo",
+        "[OSC 8 hyperlink test — click me]",
+    );
+    execute!(out, MoveTo(0, rows.saturating_sub(1)))?;
+    out.write_all(b"\x1b[4;36m")?; // underline + cyan, so it reads as a link
+    out.write_all(link.as_bytes())?;
+    out.write_all(b"\x1b[0m")?;
+    out.flush()?;
     Ok(())
 }
 
 /// Map a `wezterm-term` cell's colors/attributes onto a ratatui `Style`.
-fn cell_style(attrs: &CellAttributes, palette: &ColorPalette) -> Style {
+///
+/// Mirrors S2's policy so the comparison is fair: the terminal **default** fg/bg are left
+/// *unset* (no SGR emitted) so the host terminal's theme and background — including a
+/// background image — show through, and palette indices are forwarded as ANSI indices
+/// (host-themed) rather than resolved to fixed RGB. This is the fix for the
+/// "painted on top" / palette-mismatch artifact in the first S3 cut: previously every cell
+/// was resolved through wezterm's *own* default palette to solid RGB, which painted an
+/// opaque background over the host and ignored the user's theme.
+fn cell_style(attrs: &CellAttributes) -> Style {
     let mut s = Style::default();
-    s = s.fg(srgba_to_color(palette.resolve_fg(attrs.foreground())));
-    s = s.bg(srgba_to_color(palette.resolve_bg(attrs.background())));
+    if let Some(fg) = conv_color(attrs.foreground()) {
+        s = s.fg(fg);
+    }
+    if let Some(bg) = conv_color(attrs.background()) {
+        s = s.bg(bg);
+    }
     match attrs.intensity() {
         Intensity::Bold => s = s.add_modifier(Modifier::BOLD),
         Intensity::Half => s = s.add_modifier(Modifier::DIM),
@@ -570,6 +600,20 @@ fn cell_style(attrs: &CellAttributes, palette: &ColorPalette) -> Style {
         s = s.add_modifier(Modifier::REVERSED);
     }
     s
+}
+
+/// Convert a wezterm `ColorAttribute` to a ratatui color, returning `None` for the
+/// terminal **default** so we emit no SGR and the host theme/background shows through.
+/// Palette indices (the basic 16 + 256-color cube) map to `Color::Indexed`, which the host
+/// terminal themes — matching what the user normally sees; only genuine truecolor becomes
+/// a fixed `Color::Rgb`.
+fn conv_color(c: ColorAttribute) -> Option<Color> {
+    match c {
+        ColorAttribute::Default => None,
+        ColorAttribute::PaletteIndex(i) => Some(Color::Indexed(i)),
+        ColorAttribute::TrueColorWithPaletteFallback(rgb, _) => Some(srgba_to_color(rgb)),
+        ColorAttribute::TrueColorWithDefaultFallback(rgb) => Some(srgba_to_color(rgb)),
+    }
 }
 
 fn srgba_to_color(c: SrgbaTuple) -> Color {

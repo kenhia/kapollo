@@ -26,6 +26,7 @@ use std::io::{self, Write};
 use std::time::Duration;
 
 use anyhow::Result;
+use crossterm::cursor::MoveTo;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -496,6 +497,24 @@ fn draw(
             frame.render_widget(menu_widget, rect);
         }
     })?;
+    emit_status_hyperlink(rows)?;
+    Ok(())
+}
+
+/// Paint a single clickable OSC 8 hyperlink on the bottom row, re-emitted each frame so it
+/// survives ratatui's redraw. Quick eyeball check that links round-trip to the host
+/// terminal (the crate-level model side is `Cell::hyperlink()`); not a kapollo feature.
+fn emit_status_hyperlink(rows: u16) -> Result<()> {
+    let mut out = io::stdout();
+    let link = spike_support::osc8(
+        "https://github.com/kenhia/kapollo",
+        "[OSC 8 hyperlink test — click me]",
+    );
+    execute!(out, MoveTo(0, rows.saturating_sub(1)))?;
+    out.write_all(b"\x1b[4;36m")?; // underline + cyan, so it reads as a link
+    out.write_all(link.as_bytes())?;
+    out.write_all(b"\x1b[0m")?;
+    out.flush()?;
     Ok(())
 }
 
