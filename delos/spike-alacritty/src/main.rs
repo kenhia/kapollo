@@ -57,6 +57,9 @@ use selection::{LeftPress, SelectionController, Trigger};
 const SCROLLBACK_LEN: usize = 5000;
 const BASE: usize = SCROLLBACK_LEN;
 
+/// Lines emitted by the `Ctrl-F` flood self-test (manual T022/T027 drift harness).
+const FLOOD_LINES: usize = 2000;
+
 type SpikeTerm = Term<EventProxy>;
 
 /// Forwards the few emulator-originated events we care about. `alacritty_terminal`
@@ -349,6 +352,9 @@ fn handle_key(
             Trigger::Sigint => shell.write(&[0x03])?,
             Trigger::ContextMenu => {}
         },
+        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            flood_selftest(sel, shell, top_row(term), rows, cols)?;
+        }
         KeyCode::Esc if sel.cancel() => {}
         KeyCode::PageUp => term.scroll_display(Scroll::PageUp),
         KeyCode::PageDown => term.scroll_display(Scroll::PageDown),
@@ -366,6 +372,29 @@ fn osc_args() -> Args {
         shell: String::new(),
         clipboard: Clipboard::Osc52,
     }
+}
+
+/// Repeatable drift probe (manual T022/T027 harness, **not** a product feature): drop an
+/// Active selection band onto the current viewport, then flood the child with output.
+/// Correct, content-anchored behavior: the highlight rides up with its text and scrolls
+/// off the top. A screen-relative bug would instead glue the highlight in place over the
+/// new output streaming through those rows.
+fn flood_selftest(
+    sel: &mut SelectionController,
+    shell: &mut PtyShell,
+    top_row: usize,
+    rows: u16,
+    cols: u16,
+) -> Result<()> {
+    let band_top = top_row + (rows as usize / 3);
+    let band_bottom = band_top + 2;
+    let last_col = cols.saturating_sub(1) as usize;
+    sel.cancel();
+    sel.left_press((band_top, 0), false);
+    sel.drag_to((band_bottom, last_col));
+    sel.release();
+    shell.write(format!("seq 1 {FLOOD_LINES}\r").as_bytes())?;
+    Ok(())
 }
 
 /// Build a `rows × cols` char matrix of the *visible* viewport by indexing the grid

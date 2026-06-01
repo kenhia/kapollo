@@ -35,6 +35,16 @@ cargo run -p spike-alacritty    # S2
 cargo run -p spike-wezterm      # S3
 ```
 
+### Keybindings (S2/S3 spikes)
+
+- `Ctrl-Q` — quit
+- `Ctrl-C` — copy active selection (else SIGINT to child)
+- `Ctrl-F` — **flood self-test**: drops a 3-row selection band on the current viewport,
+  then floods `seq 1 2000` into the child. Watch the highlight: content-anchored selection
+  rides up *with its text* and scrolls off the top; a screen-relative bug would glue the
+  band in place over the streaming output. Repeatable harness for T022/T027 drift checks.
+- A clickable OSC 8 link is painted on the bottom row for a quick host round-trip check.
+
 Run the full workspace gate (all stages):
 
 ```fish

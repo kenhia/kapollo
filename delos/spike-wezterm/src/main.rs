@@ -57,6 +57,9 @@ use selection::{LeftPress, SelectionController, Trigger};
 /// Scrollback depth (rows). We override `TerminalConfiguration::scrollback_size`.
 const SCROLLBACK_LEN: usize = 5000;
 
+/// Lines emitted by the `Ctrl-F` flood self-test (manual T022/T027 drift harness).
+const FLOOD_LINES: usize = 2000;
+
 type SpikeTerm = Terminal;
 
 /// Minimal terminal configuration. `color_palette` is the only required method; we also
@@ -419,6 +422,10 @@ fn handle_key(
             Trigger::Sigint => shell.write(&[0x03])?,
             Trigger::ContextMenu => {}
         },
+        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let top = current_top_row(term, *scroll_offset);
+            flood_selftest(sel, shell, top, rows, cols)?;
+        }
         KeyCode::Esc if sel.cancel() => {}
         KeyCode::PageUp => *scroll_offset = (*scroll_offset + rows as usize).min(max),
         KeyCode::PageDown => *scroll_offset = scroll_offset.saturating_sub(rows as usize),
@@ -436,6 +443,29 @@ fn osc_args() -> Args {
         shell: String::new(),
         clipboard: Clipboard::Osc52,
     }
+}
+
+/// Repeatable drift probe (manual T022/T027 harness, **not** a product feature): drop an
+/// Active selection band onto the current viewport, then flood the child with output.
+/// Correct, content-anchored behavior: the highlight rides up with its text and scrolls
+/// off the top. A screen-relative bug would instead glue the highlight in place over the
+/// new output streaming through those rows.
+fn flood_selftest(
+    sel: &mut SelectionController,
+    shell: &mut PtyShell,
+    top_row: usize,
+    rows: u16,
+    cols: u16,
+) -> Result<()> {
+    let band_top = top_row + (rows as usize / 3);
+    let band_bottom = band_top + 2;
+    let last_col = cols.saturating_sub(1) as usize;
+    sel.cancel();
+    sel.left_press((band_top, 0), false);
+    sel.drag_to((band_bottom, last_col));
+    sel.release();
+    shell.write(format!("seq 1 {FLOOD_LINES}\r").as_bytes())?;
+    Ok(())
 }
 
 fn copy_selection(
