@@ -138,3 +138,28 @@ there for partial-redraw optimization — a real plus for a shipping grid.
   the scrollback boundary, right-click copy, `--clipboard=arboard`, and a
   full-screen TUI child (e.g. `vim`) to confirm alt-screen handover and that
   terminal-probe replies (cursor reports) flow back. Record subjective notes here.
+
+## Manual validation results
+
+Maps to the acceptance scenarios and success criteria.
+
+1. **Render (SC-001 / FR-007)**: Good
+2. **Selection + content coords (SC-004 / FR-008/009)**: Fair
+3. **Auto-scroll on drag-past-edge (FR-010)**: Good
+4. **Copy (SC-008 / FR-011/016)**: Good
+5. **SIGINT vs copy (SC-008 / FR-015)**: Good
+6. **Shift bypass (FR-017)**: Good
+7. **Wheel scroll (FR-012)**: Good
+8. **Alt-screen handover (SC-005 / FR-013)**: Good
+9. **Child mouse mode (FR-014)**: Not tested
+10. **Flood (FR-022 #8)**: Fair
+
+### Notes
+
+Due to our hyperlink test, I couldn't see the "usable prompt" once the prompt
+was at the bottom of the screen. Doing `echo '---...'` with enough dashes
+worked, prompt still there, hidden by hyperlink test.
+
+- (2): `seq 10`, select a couple numbers, `seq 5` selection shifts (if window scrolls)
+- (9): I don't know an app that I can use for test
+- (10): Responsive, same selection drift as (2)

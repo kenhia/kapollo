@@ -78,7 +78,7 @@ active selection, and SIGINT when no selection. Fill the S1 scorecard column.
 - [x] T019 [US1] SelectionController in `delos/spike-vt100/src/selection.rs` implementing the data-model state machine using `spike_support::coords`: left-press→Dragging, drag-extend with auto-scroll past edge, release→Active (no copy), second-left/ESC→cancel, Shift→forward to child (FR-008/009/010/011/017/018).
 - [x] T020 [US1] Copy triggers + context menu: right-press/Ctrl-C on Active selection → `osc52_frame` copy then deselect; right-press/Ctrl-C with no selection → "Hello, World." menu / SIGINT respectively; render the selection highlight and the trivial menu (FR-015/016/019).
 - [x] T021 [US1] Scroll input: mouse wheel + PgUp/PgDn adjust `top_row` (selection survives via content coords) (FR-012); add `--clipboard=arboard` flag to exercise the fallback (FR-021).
-- [ ] T022 [US1] Run the manual validation script ([quickstart.md](quickstart.md) §4) for S1; write the nuts-and-bolts writeup in `delos/docs/s1-vt100.md` and fill the **S1 column** of `delos/docs/scorecard.md` (all 12 criteria) (SC-001/SC-002).
+- [x] T022 [US1] Run the manual validation script ([quickstart.md](quickstart.md) §4) for S1; write the nuts-and-bolts writeup in `delos/docs/s1-vt100.md` and fill the **S1 column** of `delos/docs/scorecard.md` (all 12 criteria) (SC-001/SC-002).
 - [x] T023 [US1] Isolation check ([quickstart.md](quickstart.md) §6): at repo root `cargo tree | grep -E 'vt100|alacritty_terminal|wezterm-term|termwiz'` returns nothing and root `cargo build && cargo test` stay green (SC-007).
 
 **Checkpoint**: S1 slice runs; selection + alt-screen handover demonstrated on at least one crate (satisfies SC-004/SC-005 minimally); S1 scorecard column filled.
@@ -96,7 +96,7 @@ fill the S2 scorecard column + writeup.
 - [x] T024 [US2] Add S2 deps to `delos/spike-alacritty/Cargo.toml`: `spike-support` (path), `ratatui.workspace`, `crossterm.workspace`, `alacritty_terminal = "0.26"`.
 - [x] T025 [US2] Port the S1 binary shell into `delos/spike-alacritty/src/main.rs` + `selection.rs`: reuse `spike-support` helpers and the same terminal lifecycle/routing/selection/copy/menu/scroll wiring (T015–T021), swapping the grid model to `alacritty_terminal`'s `Term`/`Grid` parser and its scrollback (FR-005…FR-021).
 - [x] T026 [US2] Map `alacritty_terminal` cells → ratatui styled spans; cross-check its native alt-screen flag against `spike_support::modes` and note discrepancies (R4).
-- [ ] T027 [US2] Under output flood ([quickstart.md](quickstart.md) §4 step 10) record `alacritty_terminal` damage/dirty-tracking behavior and responsiveness (scorecard criterion 8).
+- [x] T027 [US2] Under output flood ([quickstart.md](quickstart.md) §4 step 10) record `alacritty_terminal` damage/dirty-tracking behavior and responsiveness (scorecard criterion 8).
 - [x] T028 [US2] Run the manual script for S2; write `delos/docs/s2-alacritty.md` (noting surprises vs S1) and fill the **S2 column** of `delos/docs/scorecard.md` (SC-001/SC-002).
 - [x] T029 [US2] Isolation check at repo root (as T023); confirm shipping graph still has zero spike deps and stays green (SC-007).
 
@@ -143,7 +143,7 @@ cites weighted-rubric evidence, and states selection + alt-screen feasibility.
 
 **Purpose**: Cross-stage validation and final hygiene.
 
-- [ ] T039 Complete the host-terminal matrix ([quickstart.md](quickstart.md) §5): run the slice in Windows Terminal Preview (primary) + at least one of GNOME Terminal/Konsole (secondary); record per-terminal OSC 52 honor in `delos/docs/scorecard.md` or the writeups (SC-006/FR-026).
+- [x] T039 Complete the host-terminal matrix ([quickstart.md](quickstart.md) §5): run the slice in Windows Terminal Preview (primary) + at least one of GNOME Terminal/Konsole (secondary); record per-terminal OSC 52 honor in `delos/docs/scorecard.md` or the writeups (SC-006/FR-026).
 - [x] T040 [P] Final isolation + green gate: at repo root confirm `cargo tree` shows zero spike deps and `cargo build && cargo test` pass; in `delos/` run `cargo fmt --check && cargo clippy -- -D warnings && cargo test` clean (SC-007).
 - [x] T041 [P] Update `delos/README.md` with final run instructions and a one-line pointer to `recommendation.md`; ensure the planning docs' decks-clearing/next-step section reflects that the spike is complete.
 

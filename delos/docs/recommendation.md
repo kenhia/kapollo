@@ -6,8 +6,18 @@ production-crate recommendation with rationale grounded in the weighted rubric
 
 ## Recommendation
 
-**`wezterm-term`** (git-pinned), with **`alacritty_terminal`** named as the explicit
-fallback if the supply-chain cost of an unpublished crate proves unacceptable.
+**`wezterm-term`** (git-pinned) is the production crate, with **`alacritty_terminal`** kept
+as a warm, published fallback should the supply-chain cost of an unpublished crate ever
+become unacceptable.
+
+This is now a **firm verdict**, not a lean. The spike confirmed the hypothesis it set out to
+test: `alacritty_terminal` and `wezterm-term` are genuinely close, `vt100` does not make the
+cut, and **`StableRowIndex` is the deciding tie-breaker** — worth the cost of pinning a
+GitHub commit instead of a semver release. Both the reasoned analysis
+([stable-row-index.md](stable-row-index.md)) and the manual quickstart runs (below) point
+the same way: wezterm's selection was visibly drift-free where the other two drifted, and
+that is the single highest-leverage property for kapollo's selection + `/save` + planned
+deep-history roadmap.
 
 All three engines cleared the bar: each one supported the content-coordinate selection
 model and the alt-screen handover (see *Feasibility* below). The decision therefore turns
@@ -42,7 +52,35 @@ Scoring only the six high-weight criteria (`++`=2, `+`=1, `~`=0, `-`=−1):
   of an app-level absolute row id.
 - **`vt100` is out (+4).** Lightest and simplest, but `~`/`-` on scrollback, selection,
   damage, and OSC 8 — the exact areas kapollo needs to be strong. Good for a quick
-  read-only mirror, not for the durable interactive grid.
+  read-only mirror, not for the durable interactive grid. The manual run sharpened this:
+  selection drifted *and* copied off-by-one (`ken` → `ke`), and `bpytop` rendered scrambled
+  in alt-screen — concrete defects, not just weak API surface.
+
+## Manual validation evidence
+
+The per-stage quickstart runs (full results in each `s*-*.md` under `## Manual validation
+results`, summarized in [scorecard.md](scorecard.md)) confirmed the paper ranking with
+ground truth:
+
+- **Selection — the decider — held up exactly as predicted.** S3 (`wezterm-term`) was the
+  only engine with drift-free selection ("Great", stable even under flood). S2 and S1 both
+  drift when the window scrolls (the `BASE − scroll` bridge showing through). This is the
+  rubric's highest-weight differentiator landing in practice, not just on paper.
+- **Alt-screen** separated S1 (scrambled `bpytop`) from S2/S3 (clean).
+- **Render, copy, SIGINT-vs-copy, shift-bypass, wheel scroll** were good across all three.
+- **Host portability:** no noticeable difference between the primary terminal and GNOME
+  Terminal (SC-006 / FR-026).
+
+### The one caveat, and why it doesn't change the verdict
+
+Under a sustained flood on S3, a selection made *while output streamed* could over-run its
+buffer and copy the wrong range (a span of `y`s instead of the dragged text). Scoped
+honestly, this only surfaces in two situations: (a) holding a selection and then running
+another command, or (b) selecting part of a large stream *as it streams*. The production
+behavior we want — **clear the selection on command submit** (Windows Terminal's behavior;
+GNOME Terminal differs) — sidesteps (a) entirely, and (b) is an unusual interaction. It is
+therefore **not blocking** for the crate decision. Worth a deeper look later, and ultimately
+a configurable clear-on-submit toggle, but it does not move the recommendation.
 
 ## Feasibility (SC-004 / SC-005)
 

@@ -100,3 +100,34 @@ of scope" rather than a working demo. It did not gate the slice.
 - Build/dep weight: `-` heaviest tree (image, terminfo, finl_unicode, many `wezterm-*`); git-pin required, ~38s cold dep build.
 - Maintenance health: `++` very actively developed, but library crates unpublished → must git-pin a commit.
 - `/save` reconstruction: `++` absolute `StableRowIndex` anchors + seqno damage; strongest reconstruction story.
+
+## Manual validation results
+
+Maps to the acceptance scenarios and success criteria.
+
+1. **Render (SC-001 / FR-007)**: Good
+2. **Selection + content coords (SC-004 / FR-008/009)**: Great
+3. **Auto-scroll on drag-past-edge (FR-010)**: Good
+4. **Copy (SC-008 / FR-011/016)**: Good
+5. **SIGINT vs copy (SC-008 / FR-015)**: Good
+6. **Shift bypass (FR-017)**: Good
+7. **Wheel scroll (FR-012)**: Good
+8. **Alt-screen handover (SC-005 / FR-013)**: Good
+9. **Child mouse mode (FR-014)**: Not tested
+10. **Flood (FR-022 #8)**: Good
+
+### Notes
+
+Due to our hyperlink test, I couldn't see the "usable prompt" once the prompt
+was at the bottom of the screen. Doing `echo '---...'` with enough dashes
+worked, prompt still there, hidden by hyperlink test.
+
+Noticed in all three, single left click selects a single cell. Not an issue for
+spike, but ideally should not select unless there is a "drag"
+
+- (9): I don't know an app that I can use for test
+- (10): Responsive, different drift...did a "copy" (both right-click and ctrl-c)
+  and got a range of `y`'s instead of original selection...may have overrun
+  buffer. Still calling this one "Good" as selection in general was better *and*
+  my thinking is that in the production `kapollo` app, submitting a command
+  should clear selection.

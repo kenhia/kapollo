@@ -83,7 +83,7 @@ inherit its sharp edges:
 - **Reflow makes it worse.** If we ever support reflow-on-resize, a relative line index
   becomes almost meaningless across a resize; an absolute logical-line id is the only sane
   anchor. (`alacritty_terminal` doesn't reflow scrollback either, so this is latent for
-  both non-wezterm options.)
+  both non-wezterm options — but see [the deep-history note below](#does-a-deep-history-block-store-change-the-calculus), which softens this considerably.)
 
 Note the cost is **not** "alacritty can't do selection or save." It can — we proved it in
 S2. The cost is that *we* own the correctness of the absolute-id machinery, in our code,
@@ -115,6 +115,113 @@ up comfortably under flood and the `/save` story feels tractable with a modest
 eviction counter, alacritty's lower carrying cost likely wins. This page exists so that
 call is made on the *mechanism*, not on a vibe.
 
+## Does a "deep history" block store change the calculus?
+
+A planned-but-not-spiked kapollo feature reframes part of this trade, so it's worth
+pricing in now. The idea: capture every command as a semantic **block** —
+`command + output + exit code` — into a durable store (a DB on disk, or simply in memory at
+roughly twice the scrollback footprint), with tiered eviction (drop the output but keep the
+command line; or evict the block wholly). Modern RAM makes the in-memory version
+essentially free at any sane scrollback size — a few thousand fully-styled lines is
+single-digit megabytes, and storing plain text plus sparse style-runs is lighter still. The
+"~2× scrollback" estimate is the right order of magnitude and only an issue at fidelity you
+can dial down.
+
+Does owning that store reduce the need for `StableRowIndex`? **Partly — and in a way that
+genuinely shifts the decision, but does not erase the advantage.** Split by use case:
+
+**What the block store subsumes outright (crate-agnostic):**
+
+- **`/save`, transcript, replay.** A block store is a *richer* record than a stable-id
+  range — it carries command boundaries and exit codes, not just rows. Reconstruction is
+  "dump these blocks," no re-anchoring. This was a headline `StableRowIndex` benefit; the
+  block store does it *better*, on any engine.
+- **Jump-to-command, command marks, error gutters.** These become block-index operations
+  once you store blocks (and you'd drive block boundaries off OSC 133 shell-integration
+  markers anyway). The block id, not `StableRowIndex`, is the natural key.
+- **Scrollback reflow.** This is the strongest hit to wezterm's edge. If the store holds
+  the *logical* (unwrapped) text of each line, a resize re-wraps from your canonical text —
+  you stop depending on the emulator to reflow scrollback at all. That neutralizes the
+  "alacritty doesn't reflow scrollback" cost flagged above, regardless of crate. (Caveat:
+  this covers *scrollback*. The live primary/alt screen still reflows inside the emulator;
+  vim/htop are the emulator's problem either way.)
+
+**What the block store does *not* solve:**
+
+- **Live grid → absolute reconciliation.** Drift-free selection is about the
+  *moment-to-moment* correspondence between "the physical row the user is dragging over
+  right now" and "which absolute line that is," while output streams and the grid churns.
+  The store is a write-side capture; it doesn't answer that live query. Anchoring a live
+  selection still needs a stable per-line id *and* a correct mapping from alacritty's
+  `display_offset`-relative grid onto it.
+- **…but here's the pivot:** *populating* the store forces you to mint exactly that id.
+  Every line you append gets a monotonic insertion index — and that index **is** a
+  hand-rolled `StableRowIndex`. So if kapollo builds deep history regardless, the
+  absolute-id machinery this page billed as a *penalty of choosing alacritty* exists
+  anyway. It stops being a *differential* cost.
+
+So the deep-history vision **does** weaken the case for wezterm: most of `StableRowIndex`'s
+durable-anchor value is delivered better by the block store, crate-agnostically, and the
+"you'd reinvent the id yourself" objection loses force because you're minting that id for
+the store no matter what.
+
+**The honest counter — why this doesn't fully settle it for alacritty:** with alacritty you
+now run **two id spaces** — the emulator's bottom-relative `display_offset` grid and your
+store's absolute insertion index — plus the bridge that keeps them in sync under flood,
+eviction, scroll-region tricks, and resize. That bridge is exactly the off-by-one-prone
+code this page warns about, and the store sits *downstream* of it: if the bridge mis-maps a
+streaming line, the store records it under the wrong absolute id, and the error is now
+**baked into durable history**, not just a transient highlight. With wezterm you have **one
+id space**: `StableRowIndex` can *be* the block store's primary key, shared by emulator and
+store, so there's no reconciliation layer to get wrong. Deep history doesn't only argue for
+alacritty — it also hands wezterm a way to make the store itself more robust.
+
+**Net for the decision:** deep history shrinks `StableRowIndex`'s *unique* value down to
+one thing — **correct, single-id-space live reconciliation** — and makes the rest (save,
+marks, reflow) a wash. That's a real point in alacritty's favor: if T022/T027 show the live
+bridge holds up tolerably, the durable-history story no longer needs wezterm. The residual
+question becomes narrow and concrete:
+
+> Do you want the emulator and your history store to share one battle-tested id
+> (**wezterm**), or are you comfortable owning the bridge between two id spaces
+> (**alacritty**) — knowing a bridge bug now corrupts *saved history*, not just a transient
+> highlight?
+
+Weigh that against the supply-chain cost above. The two framings push opposite ways, which
+is why this stays an evidence call for T022/T027 rather than a settled one.
+
+### Where the maintainer currently leans, and why it tilts to wezterm
+
+This shouldn't be read as neutral. Two design intentions, taken together, push the call
+toward wezterm:
+
+1. **Deep history is committed, not hypothetical.** The plan is to pull the rich
+   in-memory store in *from the start* (persistence can come later). That removes the main
+   escape valve for alacritty: the "most anchor value is crate-agnostic" argument only
+   holds if deep history stays a maybe. Once it's load-bearing, the residual question
+   collapses to the narrow one above — one shared id space vs. owning a bridge between two —
+   and a bridge bug there corrupts *durable* history, not just a transient highlight. The
+   more committed the feature, the more a single battle-tested id pays off.
+2. **Persistence must be privacy-configurable, and the in-memory store makes that
+   cleaner.** Persistence has to be off-able per session and toggleable mid-session (a
+   slash command, later). Committing to the rich in-memory store from day one makes that
+   tractable: capture always lands in memory; persistence becomes a *separate, async,
+   likely queued* write off that store, gated by a single switch. Memory-only is then just
+   "the persistence sink is disabled" — no second capture path, no divergence between the
+   live model and what gets written. The toggle governs one well-defined egress, which is
+   exactly what you want when the toggle is a privacy guarantee.
+
+The cost ledger is unchanged by either point: the supply-chain weight (unpublished git-pin,
+heavy transitive tree, audit/CI surface) is the same regardless. So the decision sharpens
+to an honest one-liner: *a single, library-owned id space for a history feature we're
+committed to, against a heavier, unpublished dependency.* That's a far better question to
+decide on than rendering vibes — and on those terms wezterm is the current lean.
+
+What T022/T027 still need to answer, even with that lean: **how bad is the alacritty bridge
+actually?** Not to overturn the verdict, but because a tractable bridge is the credible
+fallback if the wezterm dependency ever goes unmaintained or has to be dropped. Confirming
+the escape hatch works is worth the evening even when you've picked the front door.
+
 ## What to watch for in T022 / T027
 
 - Start a selection, then `yes`/`seq 1 100000` a flood. Does the highlight stay on the
@@ -125,3 +232,8 @@ call is made on the *mechanism*, not on a vibe.
   retained history.
 - Note *how hard* any drift would be to fix correctly in each engine — that effort, not
   the spike's pass/fail, is the real signal feeding the recommendation.
+- With the [deep-history store](#does-a-deep-history-block-store-change-the-calculus) in
+  mind, judge a subtler thing: would a bridge mis-map on alacritty merely flicker the live
+  highlight, or would it write the wrong absolute id into a record you intend to *persist*?
+  A transient drift is annoying; a corrupted durable anchor is a data bug. That distinction,
+  more than raw drift, is what should move the verdict.
