@@ -10,6 +10,12 @@ readme = "README.md"
 keywords = ["terminal", "tui", "shell", "repl", "pty"]
 categories = ["command-line-utilities", "command-line-interface"]
 
+# The 003-grid-spike lives in its own isolated Cargo workspace under delos/.
+# Excluding it here keeps spike deps (vt100/alacritty_terminal/wezterm-term)
+# out of kapollo's dependency graph and lockfile (FR-003/FR-004).
+[workspace]
+exclude = ["delos"]
+
 [lib]
 name = "kapollo"
 path = "src/lib.rs"

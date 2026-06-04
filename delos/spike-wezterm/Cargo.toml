@@ -1,0 +1,13 @@
+[package]
+name = "spike-wezterm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spike-support = { path = "../spike-support" }
+ratatui.workspace = true
+crossterm.workspace = true
+anyhow = "1"
+# wezterm-term is not published to crates.io; pin a specific main commit (R1).
+# rev recorded in delos/docs/s3-wezterm.md.
+wezterm-term = { git = "https://github.com/wezterm/wezterm.git", rev = "577474d89ee61aef4a48145cdec82a638d874751" }

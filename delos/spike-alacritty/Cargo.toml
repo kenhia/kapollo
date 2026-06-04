@@ -1,0 +1,11 @@
+[package]
+name = "spike-alacritty"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spike-support = { path = "../spike-support" }
+ratatui.workspace = true
+crossterm.workspace = true
+alacritty_terminal = "0.26"
+anyhow = "1"

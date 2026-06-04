@@ -1,0 +1,10 @@
+[package]
+name = "spike-support"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+portable-pty.workspace = true
+arboard.workspace = true
+base64 = "0.22"
+anyhow = "1"

@@ -1,0 +1,12 @@
+[package]
+name = "spike-vt100"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spike-support = { path = "../spike-support" }
+ratatui.workspace = true
+crossterm.workspace = true
+vt100 = "0.16"
+tui-term = "0.3"
+anyhow = "1"
