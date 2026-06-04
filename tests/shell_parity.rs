@@ -100,6 +100,17 @@ fn parity_run(shell: &str) -> Vec<(String, Option<i32>)> {
 
 #[test]
 fn fish_and_bash_core_run_loop_match() {
+    // Live-shell integration test (Constitution III documented exception): it
+    // requires both shells on the host. Skip gracefully when one is missing
+    // (e.g. a contributor box without fish) rather than fail; CI installs fish
+    // so the parity guarantee stays exercised there.
+    for sh in ["/usr/bin/fish", "/usr/bin/bash"] {
+        if !std::path::Path::new(sh).exists() {
+            eprintln!("skipping shell parity: {sh} not installed");
+            return;
+        }
+    }
+
     let fish = parity_run("/usr/bin/fish");
     let bash = parity_run("/usr/bin/bash");
 
