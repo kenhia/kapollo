@@ -31,8 +31,16 @@ _A screenshot/cast will be added here._
 - **Command blocks** — each command + its output + exit code is a discrete,
   scrollable block.
 - **Real shell** — fish/bash wrapped in a PTY; state persists across commands.
+- **Native terminal grid** — output is rendered through a real terminal
+  emulator (`wezterm-term`), so progress bars, in-place redraws, and inline
+  color display exactly as intended.
 - **Precise boundaries** — OSC 133 semantic prompt marks (with a sentinel
   fallback) capture exact command spans and exit codes.
+- **Mouse selection & copy** — left-drag to select, right-click to copy a
+  selection or a whole block; OSC 52 copy (SSH-friendly) with a local fallback;
+  Shift bypasses to the host terminal.
+- **Block store** — each block's output is retained in a bounded, canonical
+  store that survives scrollback eviction, backing faithful copy.
 - **Multiline editing** — Shift+Enter / Alt+Enter insert newlines; Enter
   submits the whole buffer.
 - **Input history** — kapollo's own Up/Down history, separate from the shell's.
@@ -84,7 +92,12 @@ kap --help               # full help
 | Left / Right | Move the cursor |
 | PageUp / PageDown | Scroll the transcript a page at a time |
 | Home / End | Jump to the oldest / newest output |
-| Ctrl-C | Interrupt the running command |
+| Ctrl-C | Copy an active selection, else interrupt the running command |
+
+Mouse: left-drag selects, right-click copies (the selection, or the block under
+the cursor with its command), the wheel scrolls, and Shift bypasses to the host
+terminal's native selection. Copy prefers OSC 52 (SSH-friendly) with a local
+clipboard fallback.
 
 Slash commands: `/help`, `/clear`, `/quit` (alias `/exit`). See
 [docs/usage.md](docs/usage.md) for the configuration schema and full details.
@@ -99,3 +112,7 @@ Slash commands: `/help`, `/clear`, `/quit` (alias `/exit`). See
 ## License
 
 Licensed under the [MIT License](LICENSE).
+
+kapollo's terminal grid uses the `wezterm-term` crate from
+[wezterm](https://github.com/wezterm/wezterm) (MIT). Its license is included
+under [licenses/wezterm-LICENSE.md](licenses/wezterm-LICENSE.md).

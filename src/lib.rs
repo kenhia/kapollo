@@ -3,12 +3,15 @@
 //! `kapollo` and `kap` binaries can share the same wiring.
 
 pub mod app;
+pub mod clipboard;
 pub mod config;
 pub mod error;
+pub mod grid;
 pub mod input;
 pub mod logging;
 pub mod output;
 pub mod pty;
+pub mod selection;
 pub mod session;
 pub mod slash;
 pub mod ui;

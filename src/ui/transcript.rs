@@ -85,24 +85,39 @@ pub fn lines(
     out
 }
 
-/// Render the transcript into `area`.
+/// Render the transcript into `area` from the emulated grid: the viewport
+/// window for the current scroll offset, mapped to styled ratatui lines. The
+/// emulator owns the authoritative screen + scrollback, so carriage-return
+/// progress lines update in place and alt-screen content never leaks into
+/// scrollback (FR-001/004/005, SC-001/003).
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let lines = lines(
-        app.transcript.blocks(),
-        app.config.prompt_char,
-        app.config.prompt_color,
-        super::color_enabled(),
-    );
-
-    // Pin the view to the newest output by default; `scroll_offset` scrolls up.
-    // The pad is borderless, so the whole area height is the viewport.
-    let total_lines = lines.len();
-    let viewport = area.height as usize;
-    let max_top = total_lines.saturating_sub(viewport);
+    let max_scroll = app.grid.max_scroll();
+    let offset = app.transcript.scroll_offset().min(max_scroll);
     // Record the metrics so keyboard scrolling can page and clamp (FR-021).
-    app.transcript.record_view(viewport, max_top);
-    let top = max_top.saturating_sub(app.transcript.scroll_offset()) as u16;
+    app.transcript.record_view(area.height as usize, max_scroll);
 
-    let widget = Paragraph::new(lines).scroll((top, 0));
+    let (_, cols) = app.grid.size();
+    let rows = app.grid.viewport_lines(offset);
+    // Overlay the selection highlight when one is active and a full-screen
+    // program is not in control of the screen (FR-007).
+    let lines = match app.selection.range() {
+        Some((a, b)) if !app.grid.is_alt_screen_active() => {
+            let top = app.grid.top_stable_row(offset).max(0) as usize;
+            let highlight = crate::selection::highlight_spans(rows.len(), cols, top, a, b);
+            crate::grid::render::rows_to_lines_selected(&rows, cols, &highlight)
+        }
+        _ => crate::grid::render::rows_to_lines(&rows, cols),
+    };
+
+    let widget = Paragraph::new(lines);
     frame.render_widget(widget, area);
+
+    // While a full-screen program owns the screen, show its cursor at the
+    // emulator's reported position so editors place it correctly (FR-005).
+    if app.grid.is_alt_screen_active() {
+        let (cx, cy) = app.grid.cursor();
+        let x = area.x + cx.min(area.width.saturating_sub(1));
+        let y = area.y + cy.min(area.height.saturating_sub(1));
+        frame.set_cursor_position(ratatui::layout::Position::new(x, y));
+    }
 }

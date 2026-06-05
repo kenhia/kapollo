@@ -29,10 +29,17 @@ name = "kap"
 path = "src/bin/kap.rs"
 
 [dependencies]
-ratatui = "0.29"
-crossterm = "0.28"
-portable-pty = "0.8"
+ratatui = "0.30"
+crossterm = "0.29"
+portable-pty = "0.9"
 vte = "0.13"
+# wezterm-term is the production terminal-emulation engine selected by the 003
+# spike (R1/D27). It is not published to crates.io; reproducibility rests on
+# this pinned rev plus the committed Cargo.lock. alacritty_terminal is the
+# named fallback (not added unless this proves untenable).
+wezterm-term = { git = "https://github.com/wezterm/wezterm.git", rev = "577474d89ee61aef4a48145cdec82a638d874751" }
+base64 = "0.22"
+arboard = "3.6"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 tracing = "0.1"

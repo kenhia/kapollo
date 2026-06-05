@@ -5,18 +5,22 @@
 > per-feature source is [specs/001-mvp-repl/spec.md](../specs/001-mvp-repl/spec.md);
 > the technical reference is [architecture.md](architecture.md).
 
-Last updated: 2026-05-30 (MVP hardening 002: render normalization, borderless
-chrome, passthrough verbatim stdin, OSC 7 cwd, scrolling, flood responsiveness)
+Last updated: 2026-06-04 (grid rework 004: native terminal grid via
+`wezterm-term`, mouse selection/copy with app hand-over, and the canonical
+block store)
 
 ## 1. Overview
 
 kapollo (`kap`) is a Linux terminal application that wraps the user's real
 shell (fish or bash for the MVP) and presents an Apollo-DM-style split UI: an
 **input pad** at the bottom for composing commands and a **transcript pad**
-above where each command and its output appear as a discrete **block**. A
-**slash-command** layer (invoked by a configurable leader char) adds features
-beyond a plain shell wrapper. Full-screen (alt-screen) programs are handed to
-the host terminal via **passthrough**.
+above where each command and its output appear as a discrete **block**. The
+transcript pad renders a **native terminal grid** (an embedded `wezterm-term`
+emulator), so progress bars, in-place redraws, and inline color display exactly
+as the program intended. A **slash-command** layer (invoked by a configurable
+leader char) adds features beyond a plain shell wrapper. Full-screen
+(alt-screen) programs are rendered through the same grid and receive mouse and
+key input directly.
 
 ## 2. Functional Requirements
 
@@ -96,13 +100,45 @@ the host terminal via **passthrough**.
   single status rule directly above the input pad. Color is suppressed under
   `NO_COLOR`.
 
+### Grid, selection & block store (sprint 004)
+- **FR-G01** Render the transcript through an embedded terminal emulator
+  (`wezterm-term`), which owns escape parsing, in-place CR updates, SGR color,
+  and alt-screen state; kapollo never re-implements VT parsing as text
+  heuristics. The emulator's scrollback is the authoritative scrolled history.
+- **FR-G02** Support mouse selection over the transcript: left-drag selects
+  (auto-scrolling past the edges), right-click or Ctrl-C copies a selection, and
+  Shift bypasses to the host terminal's native selection. Ctrl-C with no
+  selection still sends SIGINT.
+- **FR-G03** Hand the mouse and keys to a full-screen / mouse-grabbing child;
+  otherwise kapollo consumes them for selection and scrollback.
+- **FR-G04** Copy via OSC 52 (terminal-mediated, SSH-friendly) with a local
+  clipboard fallback, surfacing a visible notice when copying fails.
+- **FR-G05** Retain each block's output in a bounded, canonical **block store**
+  whose text is faithful and survives grid scrollback eviction; access is
+  through a stable accessor seam so a persistent backing can be added without
+  changing callers. Requests for an evicted block's text return an explicit
+  "unavailable" result.
+- **FR-G06** Offer block-aware copy affordances: a block's output with its
+  command line, without its command line, and the current line.
+- **FR-G07** Reflect each block's exit status and elapsed runtime in the chrome.
+- **FR-G08** Drive block boundaries (begin / output-start / end) from OSC 133
+  marks with a sentinel fallback, anchoring each block's grid rows to stable row
+  indices so they never drift as new output scrolls in.
+
 ## 3. Key Entities
 
-- **Block** — one command + captured output bytes + exit code, with reserved
-  flags (`private`, `save_output`).
-- **Session / Transcript** — ordered list of blocks; source of truth for the UI.
+- **Block** — one command + retained output + exit code, plus its grid
+  `row_range` (stable-row anchored), `cwd`, start/end timestamps (and derived
+  `duration`), an `available` flag, and reserved `private`/`save_output` flags.
+- **Block Store** — the canonical, bounded, in-memory collection of blocks and
+  the source of truth for copy (and future `/save`/`/filter`); text is reached
+  only through the `BlockText` accessor seam and survives grid eviction.
+- **Grid** — the embedded `wezterm-term` emulator: the authoritative screen +
+  scrollback the transcript pad renders from.
+- **Session / Transcript** — ordered list of blocks; drives caps and chrome.
 - **Input History** — kapollo's own ordered list of submitted inputs.
-- **Configuration** — shell, leader char, output caps; defaults when absent.
+- **Configuration** — shell, leader char, output caps, and the `mouse`,
+  `clipboard`, and `scroll` settings; defaults when absent.
 - **Shell Session** — the wrapped shell process in a PTY with the injected hook.
 
 ## 4. Success Criteria
@@ -116,10 +152,16 @@ the host terminal via **passthrough**.
 - **SC-007** Multiline compose + submit as a unit; arrow-key history recall.
 - **SC-008** Resize during use keeps the transcript and resizes the shell.
 - **SC-009** Identical core-run-loop behavior under fish and bash.
+- **SC-010** Progress bars / in-place redraws / inline color render correctly
+  through the grid; mouse selection and copy place exact text on the clipboard
+  with correct hand-over to full-screen programs; a block's retained text stays
+  queryable after its grid rows scroll past the scrollback cap.
 
 ## 5. Scope
 
 - **In scope (MVP)**: Linux; fish + bash; US1 (run loop), US2 (multiline +
-  history), US3 (passthrough), US4 (interrupt/control/exit).
+  history), US3 (passthrough), US4 (interrupt/control/exit). Sprint 004 adds the
+  native terminal grid, mouse selection/copy, and the canonical block store.
 - **Out of scope**: macOS/Windows, history DB persistence, AI layer, `/save`,
-  `/filter`, fuzzy search, markdown rendering, newline-key remapping.
+  `/filter` (deferred; tracked separately), fuzzy search, markdown rendering,
+  newline-key remapping.

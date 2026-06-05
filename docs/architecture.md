@@ -2,11 +2,11 @@
 
 > Status: **DRAFT** for review. Derived from
 > [specs/planning/brainstorm.md](../specs/planning/brainstorm.md) decisions
-> D1–D18. This is the authoritative technical reference per Constitution
+> D1–D30. This is the authoritative technical reference per Constitution
 > Principle II (Architecture First). Update during each spec's polish phase.
 
-Last updated: 2026-05-30 (MVP hardening 002: render normalization, borderless
-chrome, passthrough verbatim stdin, OSC 7 cwd, bounded event loop)
+Last updated: 2026-06-04 (grid rework 004: terminal-grid model via `wezterm-term`,
+mouse selection/copy/scroll, block store with retained text — reverses D4, see §8)
 
 ## 1. Overview
 
@@ -29,8 +29,12 @@ terminal via **passthrough**.
   captured output bytes, and its exit code. The UI, `/save`, `/filter`, the
   future history DB, and the future AI layer are all just consumers and
   producers of blocks.
-- **Don't build a terminal emulator** (D4): append for normal output; hand
-  raw bytes to the host terminal for alt-screen apps.
+- **~~Don't build a terminal emulator~~ Maintain a grid for the main screen**
+  (**D25 reverses D4**, sprint 004): kapollo embeds a real terminal-emulation
+  engine (`wezterm-term`, D27) to model the main screen as a grid of styled
+  cells with scrollback, so in-place redraws, inline color, and mouse selection
+  work natively. Alt-screen apps are still handed to the host via mouse/keyboard
+  routing (§4, §13). See §13 for the grid architecture.
 - **TUI integrity** (Constitution VI): logs never touch the screen; panics
   are caught at the event-loop boundary; terminal state is always restored.
 
@@ -318,8 +322,10 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
 | Concern        | Choice                         | Notes |
 |----------------|--------------------------------|-------|
 | TUI            | `ratatui` + `crossterm`        | Rendering + events + alt-screen |
+| Terminal grid  | `wezterm-term` (git-pinned)    | Main-screen emulation + scrollback + `StableRowIndex` (D27, §13) |
 | PTY            | `portable-pty`                 | Cross-platform PTY (Linux MVP) |
-| ANSI parse     | `vte`                          | OSC 133 + alt-screen detection only |
+| ANSI parse     | `vte`                          | OSC 133/7 + alt-screen/mouse-mode **side-tap** only (grid engine owns the main parse) |
+| Clipboard      | OSC 52 + `arboard` fallback (`base64`) | Copy, SSH-friendly with local fallback (D28, §13) |
 | Config         | `serde` + `toml`               | `~/.config/kapollo/config.toml` |
 | Logging        | `tracing` + `tracing-subscriber` (file appender) | Never to screen |
 | Errors         | `anyhow` (app) / `thiserror` (libs) | Actionable messages |
@@ -379,3 +385,56 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
 | Shell-native command history | D20 |
 | `KAPOLLO_ACTIVE` / `KAPOLLO_VERSION` env | D21 |
 | Linux-only MVP | D9 |
+| Terminal grid model (reverses D4) | D25 |
+| Grid scope: main screen + scrollback | D26 |
+| Engine: `wezterm-term` git-pin, alacritty fallback | D27 |
+| Mouse selection/copy/scroll + routing + OSC 52 | D28 |
+| Block-as-annotation; retained store text (R3 supersedes D29 reconstruct) | D29 |
+| Inline SGR color rendered (revises D22) | D30 |
+
+## 13. Grid Architecture (sprint 004, `004-grid-rework`)
+
+> Records the architecture for the grid rework. Realizes D25–D30 and the 003
+> spike. Specs: [004-grid-rework/plan.md](../specs/004-grid-rework/plan.md),
+> [research.md](../specs/004-grid-rework/research.md),
+> [data-model.md](../specs/004-grid-rework/data-model.md).
+
+### 13.1 Grid backend (D25/D27)
+kapollo embeds **`wezterm-term`** (git-pinned `rev =
+577474d89ee61aef4a48145cdec82a638d874751`; `alacritty_terminal` is the named
+fallback). The engine owns the main escape parse, the cell grid, scrollback,
+grapheme segmentation, and — the deciding factor — **`StableRowIndex`**, an
+absolute, eviction-proof row id. The PTY byte stream feeds
+`Grid::advance_bytes`; the renderer maps cells → ratatui styled spans and
+repaints only the engine's damaged rows. `vte` is retained **only** as a
+side-channel tap for OSC 133/7 block marks and `?1049`/`?100x` mode detection;
+it no longer applies SGR/cursor moves (that is now the engine's job).
+
+### 13.2 Block as annotation + block store (D29, R3 supersedes the v1 lean)
+A block is a row-range annotation over the grid's scrollback: `{ command,
+output, exit_code, row_range (StableRowIndex), cwd, started_at/ended_at →
+duration, state }`. **R3 (sprint 004)** makes an **in-memory block store** the
+canonical source of block text (retained output, byte/text-faithful `/save`),
+superseding D29's reconstruct-from-grid lean. All callers (`/save`, `/filter`,
+render) reach text **only** through `block.text()` / `block.text_with_command()`
+(plus `duration()`), so a future SQLite secondary backing is a drop-in with no
+caller changes. The existing `ringbuf::OutputBuffer` is reused as the bounded
+retainer; D8/D13/D14 still hold.
+
+### 13.3 Mouse, selection & clipboard (D28, revises D24)
+A `SelectionController` FSM (idle→dragging→active) anchors selections to
+`StableRowIndex`, so highlights do not drift under streaming output and clear on
+command submit (Windows-Terminal behavior). A routing layer keyed on
+(alt-screen active, child mouse-mode enabled, Shift held) decides per event:
+Shift → host-terminal native selection; alt-screen/child-mouse → forward to the
+child (passthrough folded into this routing); otherwise kapollo owns selection
++ wheel/PageUp-Down scroll. Copy uses **OSC 52** (terminal-mediated,
+SSH-friendly) with an `arboard` local fallback; total failure surfaces a
+visible notice, never a silent drop.
+
+### 13.4 Module deltas
+`src/grid/` (new: engine wrapper + render), `src/selection/` (new: FSM +
+coords, promoted from the 003 spike), `src/clipboard.rs` (new, promoted),
+`src/session/store.rs` (new: block store); `output/`, `ui/transcript.rs`,
+`session/block.rs`, `app.rs`, `config.rs` reworked; PTY, slash, input router,
+chrome, shell hooks kept (Path A in-place rework).

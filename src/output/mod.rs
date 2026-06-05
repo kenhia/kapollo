@@ -141,6 +141,11 @@ impl OutputProcessor {
                 }
             }
             Boundary::PromptStart | Boundary::CommandStart => {}
+            // Mouse-tracking mode changes are surfaced to the caller via the
+            // returned boundaries so the selection router can decide whether to
+            // forward mouse events to the child (D28); they do not affect
+            // capture state.
+            Boundary::MouseTrackingEnable(_) | Boundary::MouseTrackingDisable(_) => {}
             // OSC 7 cwd updates are surfaced to the caller via the returned
             // boundaries; they do not affect capture state (FR-019).
             Boundary::Cwd(_) => {}

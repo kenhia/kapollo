@@ -22,6 +22,11 @@ pub enum Boundary {
     AltScreenEnter,
     /// Left the alternate screen; the split UI resumes.
     AltScreenLeave,
+    /// Child enabled a mouse-tracking mode (`?1000h`, `?1002h`, `?1003h`,
+    /// `?1006h`); mouse events route to the child while active (D28, FR-013).
+    MouseTrackingEnable(u16),
+    /// Child disabled a mouse-tracking mode (the matching `l`).
+    MouseTrackingDisable(u16),
     /// OSC 7: the shell reported a new working directory (FR-019).
     Cwd(PathBuf),
 }
@@ -128,12 +133,26 @@ impl Perform for Performer<'_> {
         if intermediates != [b'?'] || !matches!(c, 'h' | 'l') {
             return;
         }
-        let mode = params.iter().next().and_then(|sub| sub.first().copied());
-        if matches!(mode, Some(1049) | Some(1047) | Some(47)) {
-            if c == 'h' {
-                self.boundary(Boundary::AltScreenEnter);
-            } else {
-                self.boundary(Boundary::AltScreenLeave);
+        // A single CSI ? set/reset may carry several `;`-separated modes; emit a
+        // boundary for each alt-screen or mouse-tracking mode we care about, in
+        // order (matches the 003 spike `modes` tap).
+        let set = c == 'h';
+        for sub in params.iter() {
+            let Some(mode) = sub.first().copied() else {
+                continue;
+            };
+            match mode {
+                1049 | 1047 | 47 => self.boundary(if set {
+                    Boundary::AltScreenEnter
+                } else {
+                    Boundary::AltScreenLeave
+                }),
+                1000 | 1002 | 1003 | 1006 => self.boundary(if set {
+                    Boundary::MouseTrackingEnable(mode)
+                } else {
+                    Boundary::MouseTrackingDisable(mode)
+                }),
+                _ => {}
             }
         }
     }
@@ -220,5 +239,50 @@ mod tests {
                 ProcessorEvent::Boundary(Boundary::AltScreenLeave),
             ]
         );
+    }
+
+    #[test]
+    fn detects_legacy_alt_screen_modes() {
+        assert_eq!(
+            parse(b"\x1b[?47h"),
+            vec![ProcessorEvent::Boundary(Boundary::AltScreenEnter)]
+        );
+        assert_eq!(
+            parse(b"\x1b[?1047l"),
+            vec![ProcessorEvent::Boundary(Boundary::AltScreenLeave)]
+        );
+    }
+
+    #[test]
+    fn detects_mouse_tracking_modes() {
+        assert_eq!(
+            parse(b"\x1b[?1000h"),
+            vec![ProcessorEvent::Boundary(Boundary::MouseTrackingEnable(
+                1000
+            ))]
+        );
+        assert_eq!(
+            parse(b"\x1b[?1006l"),
+            vec![ProcessorEvent::Boundary(Boundary::MouseTrackingDisable(
+                1006
+            ))]
+        );
+    }
+
+    #[test]
+    fn detects_multiple_modes_in_one_sequence() {
+        assert_eq!(
+            parse(b"\x1b[?1002;1006h"),
+            vec![
+                ProcessorEvent::Boundary(Boundary::MouseTrackingEnable(1002)),
+                ProcessorEvent::Boundary(Boundary::MouseTrackingEnable(1006)),
+            ]
+        );
+    }
+
+    #[test]
+    fn ignores_uninteresting_private_modes() {
+        // Cursor visibility (`?25h`) is not a boundary we tap.
+        assert_eq!(parse(b"\x1b[?25h"), vec![]);
     }
 }
