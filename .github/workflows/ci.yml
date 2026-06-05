@@ -29,6 +29,9 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install fish shell
+        run: sudo apt-get update && sudo apt-get install -y fish
+
       - name: Format check
         run: cargo fmt --check
 

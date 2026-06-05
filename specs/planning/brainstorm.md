@@ -289,6 +289,35 @@ progress bars, in-place redraws). Instead:
   for a shell REPL. When added, capture must be disabled during alt-screen
   passthrough so `vim`/`top` receive mouse events, and re-enabled on return.
 
+### Round 3 — Grid pivot (promoted from grid-pivot planning, sprint 004)
+
+> Source: [grid-pivot/02-rework-vs-rewrite.md](grid-pivot/02-rework-vs-rewrite.md) §6
+> and the 003 spike recommendation. Realized by the `004-grid-rework` feature.
+
+- **D25 — Grid model (reverses D4)**: kapollo **does** maintain a terminal grid
+  model for the main screen, with scrollback. Supersedes D4's "no grid model".
+- **D26 — Grid scope**: emulate the main screen + scrollback (render/selection
+  surface); block boundaries stay a shell-integration concern (OSC 133/7).
+- **D27 — Engine**: `wezterm-term`, git-pinned `rev =
+  577474d89ee61aef4a48145cdec82a638d874751`, with `alacritty_terminal` as the
+  named fallback (003 spike winner; `StableRowIndex` the deciding factor).
+- **D28 — Mouse (revises D24)**: click-drag selection + wheel/PageUp-Down
+  scroll + alt-screen/inner-mouse-mode routing; Shift bypasses to the host
+  terminal; clipboard via OSC 52 with a local fallback. Revises D24's
+  "mouse deferred/opt-in".
+- **D29 — Block-as-annotation-over-grid (refines D8/D13/D14)**: a block is a
+  row-range annotation over the grid's scrollback, behind a single text
+  accessor (`block.text()` / `block.text_with_command()`).
+  **SUPERSEDED in part by R3 (sprint 004):** the v1 lean of *reconstructing*
+  block text from grid rows is replaced by an **in-memory block store that
+  retains each block's output text as canonical** (byte/text-faithful `/save`,
+  foundation for deep-history + privacy-toggleable persistence). The accessor
+  surface is unchanged, so a future database backing is a drop-in (no caller
+  changes). See [004-grid-rework/research.md](../004-grid-rework/research.md) R3.
+- **D30 — Inline SGR color (revises D22)**: the wrapped program's inline color
+  and text attributes are now rendered in the transcript. Revises D22's
+  Tier-2 deferral.
+
 ### Scope boundaries (derived)
 - **MVP (Linux only)**: PTY-wrapped configurable shell; input/output pads;
   Enter/Shift+Enter; history; scrollable transcript; resize-safe; Ctrl-C;

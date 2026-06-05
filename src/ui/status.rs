@@ -34,13 +34,34 @@ pub fn line(cwd: &Path, last_exit: Option<i32>, color: bool) -> Line<'static> {
 }
 
 /// Render the status rule into `area`, filling the remaining width with the rule
-/// glyph so it reads as a single horizontal line.
+/// glyph so it reads as a single horizontal line. A transient `notice` (e.g. a
+/// copy failure) is shown after the cwd in a warning color so it is never
+/// silently dropped (FR-013).
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let color = super::color_enabled();
     let base = line(&app.cwd, app.last_exit, color);
 
-    let used = base.width() as u16;
     let mut spans = base.spans.clone();
+    // Reflect the most-recent block's elapsed runtime once it is sealed, beside
+    // the exit indication, so the chrome shows both outcome and duration
+    // (FR-023, T036). A still-running block has no duration yet.
+    if let Some(dur) = app.store.last().and_then(|b| b.duration()) {
+        let mut span = Span::raw(format!("({}) ", format_duration(dur)));
+        if color {
+            span = span.style(Style::default().fg(Color::DarkGray));
+        }
+        spans.push(span);
+    }
+    // Surface any pending notice prominently before the fill (FR-013).
+    if let Some(notice) = app.notice.as_deref() {
+        let mut span = Span::raw(format!("{notice} "));
+        if color {
+            span = span.style(Style::default().fg(Color::LightRed));
+        }
+        spans.push(span);
+    }
+
+    let used = Line::from(spans.clone()).width() as u16;
     if used < area.width {
         spans.push(Span::raw("─".repeat((area.width - used) as usize)));
     }
@@ -49,4 +70,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         rule = rule.style(Style::default().fg(Color::DarkGray));
     }
     frame.render_widget(Paragraph::new(rule), area);
+}
+
+/// Format an elapsed command runtime compactly for the status rule: sub-minute
+/// durations as fractional seconds (`0.42s`), longer ones as `1m03s`.
+fn format_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs_f64();
+    if secs < 60.0 {
+        format!("{secs:.2}s")
+    } else {
+        let total = d.as_secs();
+        format!("{}m{:02}s", total / 60, total % 60)
+    }
 }

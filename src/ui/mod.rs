@@ -11,7 +11,8 @@ use std::io::{self, Write};
 
 use crossterm::cursor::{Hide, Show};
 use crossterm::event::{
-    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -39,6 +40,13 @@ pub fn color_enabled() -> bool {
     }
 }
 
+/// The input pad's content height in lines, clamped to `[1, MAX_INPUT_LINES]`.
+/// Shared by the layout and the grid-sizing path so the emulator's row count
+/// always matches the rendered transcript pane (FR-004/006).
+pub fn input_pad_height(input: &crate::input::InputPad) -> u16 {
+    (input.as_str().split('\n').count() as u16).clamp(1, MAX_INPUT_LINES)
+}
+
 /// RAII guard that puts the terminal into raw mode + the alternate screen on
 /// creation and unconditionally restores it on drop (FR-025).
 #[derive(Debug)]
@@ -53,7 +61,7 @@ impl TerminalGuard {
     pub fn enter() -> io::Result<Self> {
         enable_raw_mode()?;
         let mut out = io::stdout();
-        execute!(out, EnterAlternateScreen, Hide)?;
+        execute!(out, EnterAlternateScreen, Hide, EnableMouseCapture)?;
         // Ignore errors: terminals without the protocol simply fall back to
         // Alt+Enter for newline insertion.
         let _ = execute!(
@@ -68,7 +76,7 @@ impl TerminalGuard {
     pub fn restore() -> io::Result<()> {
         let mut out = io::stdout();
         let _ = execute!(out, PopKeyboardEnhancementFlags);
-        execute!(out, LeaveAlternateScreen, Show)?;
+        execute!(out, DisableMouseCapture, LeaveAlternateScreen, Show)?;
         disable_raw_mode()?;
         out.flush()?;
         Ok(())
@@ -122,8 +130,16 @@ pub fn render(frame: &mut Frame, app: &App) {
         return;
     }
 
+    // While a full-screen program owns the screen (alt-screen), the emulator's
+    // grid fills the whole area and kapollo's chrome is hidden so the program
+    // gets the full viewport (FR-005, FR-018).
+    if app.grid.is_alt_screen_active() {
+        render_transcript(frame, area, app);
+        return;
+    }
+
     // The input pad is borderless now, so its height is just its line count.
-    let input_height = (app.input.as_str().split('\n').count() as u16).clamp(1, MAX_INPUT_LINES);
+    let input_height = input_pad_height(&app.input);
 
     let [transcript_area, status_area, input_area] = split_layout(area, input_height);
 

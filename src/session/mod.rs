@@ -2,8 +2,10 @@
 
 pub mod block;
 pub mod ringbuf;
+pub mod store;
 
-pub use block::{Block, BlockId, BlockState};
+pub use block::{Block, BlockId, BlockState, BlockText};
+pub use store::BlockStore;
 
 use crate::config::Caps;
 

@@ -21,12 +21,24 @@ const DEFAULT_PER_BLOCK_LINES: u64 = 50_000;
 const DEFAULT_TRANSCRIPT_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
 const DEFAULT_TRANSCRIPT_BLOCKS: u64 = 1_000;
 
+// Grid-rework surface defaults (sprint 004). All chosen so kapollo behaves the
+// same out of the box: mouse selection on, OSC 52 copy with a local fallback.
+const DEFAULT_MOUSE_ENABLED: bool = true;
+const DEFAULT_COPY_ON_SELECT: bool = false;
+const DEFAULT_CLIPBOARD_OSC52: bool = true;
+const DEFAULT_CLIPBOARD_LOCAL_FALLBACK: bool = true;
+const DEFAULT_WHEEL_LINES: u16 = 3;
+const DEFAULT_SCROLLBACK_LINES: u64 = 10_000;
+
 const TOP_LEVEL_KEYS: &[&str] = &[
     "shell",
     "leader_char",
     "prompt_char",
     "prompt_color",
     "caps",
+    "mouse",
+    "clipboard",
+    "scroll",
 ];
 const CAPS_KEYS: &[&str] = &[
     "per_block_bytes",
@@ -34,6 +46,9 @@ const CAPS_KEYS: &[&str] = &[
     "transcript_bytes",
     "transcript_blocks",
 ];
+const MOUSE_KEYS: &[&str] = &["enabled", "copy_on_select"];
+const CLIPBOARD_KEYS: &[&str] = &["osc52", "local_fallback"];
+const SCROLL_KEYS: &[&str] = &["wheel_lines", "scrollback_lines"];
 
 /// Effective kapollo configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +64,41 @@ pub struct Config {
     pub prompt_color: Color,
     /// Output retention caps.
     pub caps: Caps,
+    /// Mouse capture / selection behavior (sprint 004, D28).
+    pub mouse: Mouse,
+    /// Clipboard copy path and fallback order (sprint 004, D28).
+    pub clipboard: Clipboard,
+    /// Scroll / scrollback behavior (sprint 004).
+    pub scroll: Scroll,
+}
+
+/// Mouse capture / selection behavior (FR-013, FR-017).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mouse {
+    /// Whether kapollo captures the mouse for selection. When `false`, mouse
+    /// events are left to the host terminal.
+    pub enabled: bool,
+    /// Copy the selection to the clipboard automatically on release.
+    pub copy_on_select: bool,
+}
+
+/// Clipboard copy path and fallback order (FR-020, FR-021).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clipboard {
+    /// Use terminal-mediated OSC 52 copy (SSH-friendly). Tried first.
+    pub osc52: bool,
+    /// Fall back to the local OS clipboard (`arboard`) when OSC 52 is off or
+    /// unavailable.
+    pub local_fallback: bool,
+}
+
+/// Scroll / scrollback behavior.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scroll {
+    /// Lines advanced per mouse-wheel notch.
+    pub wheel_lines: u16,
+    /// Number of scrollback lines the grid retains.
+    pub scrollback_lines: u64,
 }
 
 /// Output retention caps (ring-buffer semantics; FR-016).
@@ -68,6 +118,36 @@ impl Default for Config {
             prompt_char: DEFAULT_PROMPT_CHAR,
             prompt_color: DEFAULT_PROMPT_COLOR,
             caps: Caps::default(),
+            mouse: Mouse::default(),
+            clipboard: Clipboard::default(),
+            scroll: Scroll::default(),
+        }
+    }
+}
+
+impl Default for Mouse {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_MOUSE_ENABLED,
+            copy_on_select: DEFAULT_COPY_ON_SELECT,
+        }
+    }
+}
+
+impl Default for Clipboard {
+    fn default() -> Self {
+        Self {
+            osc52: DEFAULT_CLIPBOARD_OSC52,
+            local_fallback: DEFAULT_CLIPBOARD_LOCAL_FALLBACK,
+        }
+    }
+}
+
+impl Default for Scroll {
+    fn default() -> Self {
+        Self {
+            wheel_lines: DEFAULT_WHEEL_LINES,
+            scrollback_lines: DEFAULT_SCROLLBACK_LINES,
         }
     }
 }
@@ -136,6 +216,27 @@ struct RawConfig {
     prompt_char: Option<String>,
     prompt_color: Option<String>,
     caps: Option<RawCaps>,
+    mouse: Option<RawMouse>,
+    clipboard: Option<RawClipboard>,
+    scroll: Option<RawScroll>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawMouse {
+    enabled: Option<bool>,
+    copy_on_select: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawClipboard {
+    osc52: Option<bool>,
+    local_fallback: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawScroll {
+    wheel_lines: Option<u16>,
+    scrollback_lines: Option<u64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -217,6 +318,30 @@ impl RawConfig {
             prompt_char,
             prompt_color,
             caps,
+            mouse: {
+                let raw = self.mouse.unwrap_or_default();
+                let d = Mouse::default();
+                Mouse {
+                    enabled: raw.enabled.unwrap_or(d.enabled),
+                    copy_on_select: raw.copy_on_select.unwrap_or(d.copy_on_select),
+                }
+            },
+            clipboard: {
+                let raw = self.clipboard.unwrap_or_default();
+                let d = Clipboard::default();
+                Clipboard {
+                    osc52: raw.osc52.unwrap_or(d.osc52),
+                    local_fallback: raw.local_fallback.unwrap_or(d.local_fallback),
+                }
+            },
+            scroll: {
+                let raw = self.scroll.unwrap_or_default();
+                let d = Scroll::default();
+                Scroll {
+                    wheel_lines: raw.wheel_lines.unwrap_or(d.wheel_lines),
+                    scrollback_lines: raw.scrollback_lines.unwrap_or(d.scrollback_lines),
+                }
+            },
         })
     }
 }
@@ -231,6 +356,27 @@ fn warn_unknown_keys(table: &toml::Table) {
         for key in caps.keys() {
             if !CAPS_KEYS.contains(&key.as_str()) {
                 tracing::warn!(key = %key, "unknown config key in [caps] ignored");
+            }
+        }
+    }
+    if let Some(toml::Value::Table(mouse)) = table.get("mouse") {
+        for key in mouse.keys() {
+            if !MOUSE_KEYS.contains(&key.as_str()) {
+                tracing::warn!(key = %key, "unknown config key in [mouse] ignored");
+            }
+        }
+    }
+    if let Some(toml::Value::Table(clipboard)) = table.get("clipboard") {
+        for key in clipboard.keys() {
+            if !CLIPBOARD_KEYS.contains(&key.as_str()) {
+                tracing::warn!(key = %key, "unknown config key in [clipboard] ignored");
+            }
+        }
+    }
+    if let Some(toml::Value::Table(scroll)) = table.get("scroll") {
+        for key in scroll.keys() {
+            if !SCROLL_KEYS.contains(&key.as_str()) {
+                tracing::warn!(key = %key, "unknown config key in [scroll] ignored");
             }
         }
     }
