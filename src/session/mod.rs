@@ -90,9 +90,13 @@ impl Transcript {
         self.scroll_offset = offset;
     }
 
-    /// Scroll the transcript up (toward older output) by `n` lines (FR-014).
+    /// Scroll the transcript up (toward older output) by `n` lines, clamped at
+    /// the oldest retained line so the offset never runs past the top (FR-014).
     pub fn scroll_up(&mut self, n: usize) {
-        self.scroll_offset = self.scroll_offset.saturating_add(n);
+        self.scroll_offset = self
+            .scroll_offset
+            .saturating_add(n)
+            .min(self.max_scroll.get());
     }
 
     /// Scroll the transcript down (toward newer output) by `n` lines (FR-014).
@@ -111,17 +115,48 @@ impl Transcript {
     /// Scroll up by one page (the recorded viewport height), clamped to the top
     /// of the content (FR-021).
     pub fn page_up(&mut self) {
-        let page = self.viewport.get().max(1);
-        self.scroll_offset = self
-            .scroll_offset
-            .saturating_add(page)
-            .min(self.max_scroll.get());
+        self.scroll_page_up(0);
     }
 
     /// Scroll down by one page, clamped to the newest output (FR-021).
     pub fn page_down(&mut self) {
-        let page = self.viewport.get().max(1);
-        self.scroll_offset = self.scroll_offset.saturating_sub(page);
+        self.scroll_page_down(0);
+    }
+
+    /// Scroll up by one page *minus* `context_lines` of overlap, floored to at
+    /// least one line and clamped to the top of the content (FR-013/FR-014).
+    pub fn scroll_page_up(&mut self, context_lines: u16) {
+        let advance = self.page_advance(context_lines);
+        self.scroll_offset = self
+            .scroll_offset
+            .saturating_add(advance)
+            .min(self.max_scroll.get());
+    }
+
+    /// Scroll down by one page *minus* `context_lines` of overlap, floored to at
+    /// least one line and clamped to the newest output (FR-013/FR-014).
+    pub fn scroll_page_down(&mut self, context_lines: u16) {
+        let advance = self.page_advance(context_lines);
+        self.scroll_offset = self.scroll_offset.saturating_sub(advance);
+    }
+
+    /// Scroll up by exactly one line (FR-015), the named `scroll_line_up` action.
+    pub fn scroll_line_up(&mut self) {
+        self.scroll_up(1);
+    }
+
+    /// Scroll down by exactly one line (FR-015), the named `scroll_line_down`
+    /// action.
+    pub fn scroll_line_down(&mut self) {
+        self.scroll_down(1);
+    }
+
+    /// The per-page advance: the recorded viewport minus `context_lines` of
+    /// overlap, always at least one line so a short pad still moves (FR-014).
+    fn page_advance(&self, context_lines: u16) -> usize {
+        (self.viewport.get().max(1))
+            .saturating_sub(context_lines as usize)
+            .max(1)
     }
 
     /// Jump to the oldest retained output (FR-021).

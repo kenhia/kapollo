@@ -102,20 +102,32 @@ terminal via **passthrough**.
   command** (starts with leader char, not escaped) or **pass-through** to
   the shell (D6). Handles the doubled-leader escape.
 - **Slash Command Registry** — Maps slash command names to handlers. MVP
-  builtins: `/quit`, `/clear`, `/help`. Handlers receive an app context
-  (read State / blocks, write a new block, mutate UI). `/exit` is an alias of
-  `/quit`. Designed so later commands (`/save`, `/filter`, AI commands) and
-  plugins slot in unchanged.
+  builtins: `/quit`, `/clear`, `/help`, plus `/status` (toggle the fixed status
+  bar) and `/keys` (list the active key bindings from the action registry).
+  Handlers receive an app context (read State / blocks, write a new block,
+  mutate UI). `/exit` is an alias of `/quit`. Designed so later commands
+  (`/save`, `/filter`, AI commands) and plugins slot in unchanged.
+- **Input editing & key actions** — A named-action registry (`src/action`)
+  maps key chords to stable `Action` names (readline-style line motion, word
+  motion, keyboard text selection, kills, and transcript scroll), resolved in
+  `on_key` and listed by `/keys` (FR-008/FR-030). Contextual gestures —
+  `Ctrl+C` (copy-or-interrupt), `Esc`/`Esc Esc` (cancel selection / clear line /
+  clear multiline buffer + status message), and `Enter` — are arbitrated
+  directly in `on_key`, not via the chord table. At most one text selection is
+  active across the input pad and transcript at a time.
 - **TUI / Renderer** — Draws input pad, transcript pad, and status chrome
   from a read-only view of State. Translates key/resize events into App
   messages. Manages alt-screen handoff for passthrough. Crates: `ratatui`,
   `crossterm`. The transcript is **borderless** (the renderer owns and clears
   its full rectangle each frame), each command is echoed with a colorized
   prompt glyph (`λ` by default; `prompt_char`/`prompt_color`), consecutive
-  blocks are separated by a blank line, and a single **status rule** sits
-  directly above the input pad carrying the cwd (always) and the last exit code
-  (only when non-zero). Color is suppressed under `NO_COLOR` (FR-005–FR-011,
-  FR-018).
+  blocks are separated by a blank line, a **divider** rule sits directly above
+  the input pad, and a single fixed **status bar** sits below it carrying a
+  4-column mode field, the cwd (following `cd`), a transient message, and the
+  last exit code (right-anchored). The bar never wraps — under width pressure the
+  message is elided first, then the cwd is middle-ellipsized — and auto-hides
+  below 10 rows or when disabled via `/status`. Color is suppressed under
+  `NO_COLOR` (FR-005–FR-011, FR-018–FR-024).
 - **App / Event Loop** — Owns `State`, wires the layers, runs the main
   select loop (input events ⨉ PTY output ⨉ child-exit ⨉ ticks), and is the
   **panic boundary**: a panic is caught, the terminal is restored, and the

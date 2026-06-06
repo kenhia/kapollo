@@ -52,6 +52,10 @@ pub struct App {
     /// A transient one-line notice shown on the status rule (e.g. a copy
     /// failure), cleared on the next successful action (FR-013).
     pub notice: Option<String>,
+    /// True when the immediately preceding key was `Esc`, so the next `Esc`
+    /// completes the `Esc Esc` gesture. Reset by any non-Esc key — a keypress
+    /// flag, never a wall clock (FR-026/FR-029, research R6).
+    esc_pending: bool,
     processor: OutputProcessor,
     current_block: Option<BlockId>,
     /// The canonical, retained block store — the source of truth for `/save`,
@@ -93,6 +97,7 @@ impl App {
             grid,
             selection: SelectionController::new(),
             notice: None,
+            esc_pending: false,
             processor,
             current_block: None,
             store,
@@ -137,6 +142,16 @@ impl App {
                         }
                     }
                     Event::Mouse(m) => self.on_mouse(m),
+                    // Bracketed paste arrives as one unit: insert it into the
+                    // input pad without submitting (FR-010/011/012). While a
+                    // full-screen child owns the screen, forward it instead.
+                    Event::Paste(text) => {
+                        if self.passthrough {
+                            let _ = self.shell.write_input(text.as_bytes());
+                        } else {
+                            self.input.insert_paste(&text);
+                        }
+                    }
                     // The terminal resized; `sync_size` reflows the grid + PTY on
                     // the next iteration (FR-017, SC-008).
                     Event::Resize(_, _) => {}
@@ -283,7 +298,12 @@ impl App {
             let chrome = if self.passthrough {
                 0
             } else {
-                1 + crate::ui::input_pad_height(&self.input)
+                let status_rows = u16::from(crate::ui::status::is_visible(
+                    self.config.status.enabled,
+                    size.height,
+                ));
+                let divider_rows = u16::from(self.config.divider.enabled);
+                crate::ui::input_pad_height(&self.input) + status_rows + divider_rows
             };
             let cols = size.width.max(1);
             let rows = size.height.saturating_sub(chrome).max(1);
@@ -331,6 +351,9 @@ impl App {
         let wheel = (self.config.scroll.wheel_lines as usize).max(1);
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                // Starting a transcript selection clears any input-pad selection
+                // so at most one pad is ever selected (FR-027).
+                self.input.cancel_selection();
                 let cell = self.cell_at(m.row, m.column);
                 let _ = self.selection.left_press(cell, false);
             }
@@ -488,20 +511,39 @@ impl App {
     }
 
     fn on_key(&mut self, key: KeyEvent) {
+        use crate::action::{self, KeyChord};
+        // `Esc Esc` is a contextual two-key gesture tracked by a keypress flag,
+        // not a timer (FR-026/FR-029): any non-Esc key resets it.
+        let was_esc_pending = self.esc_pending;
+        if !matches!(key.code, KeyCode::Esc) {
+            self.esc_pending = false;
+        }
         match (key.code, key.modifiers) {
-            // Ctrl-C copies an active selection; otherwise it interrupts the
-            // running command via the PTY line discipline (FR-013, FR-024).
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) => match self.selection.ctrl_c() {
-                Trigger::Copy(a, b) => self.copy_selection(a, b),
-                Trigger::Sigint => {
-                    let _ = self.shell.send_interrupt();
+            // Ctrl-C copies an active selection — input pad first, then the
+            // transcript — and otherwise interrupts the running command via the
+            // PTY line discipline (FR-024, FR-028). Copy never shadows interrupt.
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                if self.input.has_selection() {
+                    if let Some(text) = self.input.selected_text() {
+                        if self.deliver_copy(&text) {
+                            self.notice = Some("copied selection".into());
+                        }
+                    }
+                    self.input.cancel_selection();
+                } else {
+                    match self.selection.ctrl_c() {
+                        Trigger::Copy(a, b) => self.copy_selection(a, b),
+                        Trigger::Sigint => {
+                            let _ = self.shell.send_interrupt();
+                        }
+                        Trigger::ContextMenu => {}
+                    }
                 }
-                Trigger::ContextMenu => {}
-            },
-            // Esc clears any active selection (FR-008).
-            (KeyCode::Esc, _) => {
-                self.selection.cancel();
             }
+            // Esc is contextual (FR-029): cancel a selection, else clear the
+            // current line; `Esc Esc` clears a multi-line buffer and the status
+            // message (FR-026).
+            (KeyCode::Esc, _) => self.on_esc(was_esc_pending),
             // Shift+Enter / Alt+Enter insert a newline without submitting
             // (FR-010, FR-011). Shift requires the Kitty protocol; Alt is the
             // universal fallback (research R5).
@@ -509,8 +551,10 @@ impl App {
             (KeyCode::Enter, m) if m.contains(KeyModifiers::ALT) => self.input.insert_newline(),
             (KeyCode::Enter, _) => self.submit(),
             (KeyCode::Backspace, _) => self.input.backspace(),
-            (KeyCode::Left, _) => self.input.move_left(),
-            (KeyCode::Right, _) => self.input.move_right(),
+            // Plain Left/Right move the cursor; Shift/Ctrl variants resolve to
+            // named selection/word-motion actions below (FR-002/003/004).
+            (KeyCode::Left, KeyModifiers::NONE) => self.input.move_left(),
+            (KeyCode::Right, KeyModifiers::NONE) => self.input.move_right(),
             // Up/Down recall kapollo's own input history (FR-013).
             (KeyCode::Up, _) => {
                 if let Some(text) = self.history.recall_older() {
@@ -524,18 +568,104 @@ impl App {
                     self.input.set_contents(text);
                 }
             }
-            // PageUp/PageDown scroll the transcript by a page; Home/End jump to
-            // the oldest/newest output (FR-021).
-            (KeyCode::PageUp, _) => self.transcript.page_up(),
-            (KeyCode::PageDown, _) => self.transcript.page_down(),
-            (KeyCode::Home, _) => self.transcript.scroll_to_top(),
-            (KeyCode::End, _) => self.transcript.scroll_to_bottom(),
-            (KeyCode::Char(c), _) => self.input.insert_char(c),
-            _ => {}
+            // Everything else flows through the named-action registry (FR-008):
+            // Home/End line motion, Ctrl+arrow word motion, Shift selections,
+            // Ctrl+U/K/W kills, and the page/line scroll bindings.
+            (code, mods) => {
+                if let Some(action) = action::resolve(KeyChord::new(code, mods)) {
+                    self.dispatch_action(action);
+                } else if let KeyCode::Char(c) = code {
+                    if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) {
+                        self.input.insert_char(c);
+                    }
+                }
+            }
         }
     }
 
+    /// Execute a resolved named [`crate::action::Action`] (FR-008). Input-line
+    /// actions edit the pad; scroll actions drive the transcript. The
+    /// named-but-unmapped reserved motions and the contextual
+    /// `clear_status_message` gesture never arrive here via `resolve`.
+    fn dispatch_action(&mut self, action: crate::action::Action) {
+        use crate::action::Action;
+        match action {
+            Action::LineMoveStart => self.input.line_move_start(),
+            Action::LineMoveEnd => self.input.line_move_end(),
+            Action::WordMoveLeft => self.input.word_move_left(),
+            Action::WordMoveRight => self.input.word_move_right(),
+            // Starting an input-pad selection clears any transcript selection so
+            // at most one pad is ever selected (FR-027).
+            Action::SelectCharLeft => {
+                self.selection.cancel();
+                self.input.select_char_left();
+            }
+            Action::SelectCharRight => {
+                self.selection.cancel();
+                self.input.select_char_right();
+            }
+            Action::SelectWordLeft => {
+                self.selection.cancel();
+                self.input.select_word_left();
+            }
+            Action::SelectWordRight => {
+                self.selection.cancel();
+                self.input.select_word_right();
+            }
+            Action::KillToLineStart => self.input.kill_to_line_start(),
+            Action::KillToLineEnd => self.input.kill_to_line_end(),
+            Action::DeleteWordBefore => self.input.delete_word_before(),
+            // Scrollback bindings (FR-013/015/016): page scroll preserves
+            // `context_lines` of overlap, line scroll moves one line, and the
+            // top/bottom jumps are reachable via Shift+Home/End.
+            Action::ScrollPageUp => self
+                .transcript
+                .scroll_page_up(self.config.scroll.context_lines),
+            Action::ScrollPageDown => self
+                .transcript
+                .scroll_page_down(self.config.scroll.context_lines),
+            Action::ScrollLineUp => self.transcript.scroll_line_up(),
+            Action::ScrollLineDown => self.transcript.scroll_line_down(),
+            Action::ScrollToTop => self.transcript.scroll_to_top(),
+            Action::ScrollToBottom => self.transcript.scroll_to_bottom(),
+            Action::ClearStatusMessage
+            | Action::MultilineMoveStartBuffer
+            | Action::MultilineMoveEndBuffer => {}
+        }
+    }
+
+    /// Handle an `Esc` press (FR-029). The first `Esc` cancels an active
+    /// selection (either pad) or clears the caret's current line; a second
+    /// consecutive `Esc` clears a multi-line buffer and the status message
+    /// (FR-026). `was_pending` is whether the immediately preceding key was also
+    /// `Esc` — the double-Esc gesture is a keypress flag, not a timer.
+    fn on_esc(&mut self, was_pending: bool) {
+        use crate::input::selection::{esc_action, EscAction};
+        // The double-Esc gesture also clears the status message, independent of
+        // the buffer effect (FR-026).
+        if was_pending {
+            self.notice = None;
+        }
+        let has_selection = self.selection.range().is_some() || self.input.has_selection();
+        let multiline = self.input.line_count() > 1;
+        match esc_action(was_pending, has_selection, multiline) {
+            EscAction::CancelSelection => {
+                self.selection.cancel();
+                self.input.cancel_selection();
+            }
+            EscAction::ClearCurrentLine => self.input.clear_current_line(),
+            EscAction::ClearWholeBuffer => self.input.clear(),
+            EscAction::None => {}
+        }
+        // Toggle the pending flag: this `Esc` arms the gesture; the next `Esc`
+        // completes it.
+        self.esc_pending = !was_pending;
+    }
+
     fn submit(&mut self) {
+        // The status message persists until the next submission or `Esc Esc`,
+        // never a timeout (FR-025/FR-026): a fresh submit clears it.
+        self.notice = None;
         let line = self.input.take_submit();
         self.history.push(line.clone());
         // A fresh submission scrolls the transcript back to the newest output
@@ -569,6 +699,29 @@ impl App {
             // `/quit` triggers the same clean-teardown path as shell exit
             // (FR-025): the loop ends and the RAII terminal guard restores.
             Dispatch::Command(SlashCommand::Quit) => self.should_quit = true,
+            // `/status` toggles the fixed status bar config flag (FR-026). The
+            // bar is rendered in a later sprint phase; the flag is honored then.
+            Dispatch::Command(SlashCommand::Status) => {
+                self.config.status.enabled = !self.config.status.enabled;
+                let state = if self.config.status.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
+                self.synthetic_block(
+                    format!("{}status", self.config.leader_char),
+                    &format!("Status bar {state}.\n"),
+                );
+            }
+            // `/keys` lists the active key bindings from the action registry
+            // (FR-030).
+            Dispatch::Command(SlashCommand::Keys) => {
+                let mut text = String::from("Active key bindings:\n\n");
+                for (name, keys) in crate::action::listing() {
+                    text.push_str(&format!("  {keys:<14}  {name}\n"));
+                }
+                self.synthetic_block(format!("{}keys", self.config.leader_char), &text);
+            }
             Dispatch::Unknown(name) => {
                 let text = builtins::unknown_text(&name, self.config.leader_char);
                 self.synthetic_block(format!("{}{}", self.config.leader_char, name), &text);

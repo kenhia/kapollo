@@ -41,14 +41,17 @@ key input directly.
   sequences or terminal query/responses as visible text.
 
 ### Input pad & history
-- **FR-009** Submit the input pad contents on Enter.
+- **FR-009** Submit the input pad contents on Enter; on submit, trailing
+  whitespace-only lines of a multiline buffer are dropped (interior blanks
+  preserved; single-line input unchanged).
 - **FR-010** Insert a literal newline on Shift+Enter / Alt+Enter (no submit).
 - **FR-011** Support multiline input as a single submitted command.
 - **FR-012** Auto-grow the input pad up to a height cap, then scroll internally.
 - **FR-013** Maintain kapollo's own input history (separate from the shell's),
   recalled with Up/Down.
 - **FR-014** Scroll the transcript independently of the input pad: PageUp/
-  PageDown by a page and Home/End to the oldest/newest output (clamped);
+  PageDown by a page (keeping `scroll.context_lines` of overlap), Shift+PageUp/
+  PageDown by a line, and Shift+Home/End to the oldest/newest output (clamped);
   submitting a command re-pins the view to the newest output.
 
 ### Output retention
@@ -74,7 +77,8 @@ key input directly.
   through to the shell.
 - **FR-022** Doubled leader escapes to a literal leader char passed to the shell.
 - **FR-023** Provide at least `/quit`, `/clear`, and `/help` (with `/exit` as an
-  alias of `/quit`).
+  alias of `/quit`), plus `/status` (toggle the fixed status bar) and `/keys`
+  (list the active key bindings).
 
 ### Signals, safety & teardown
 - **FR-024** Forward Ctrl-C (SIGINT) to the running command, not kapollo.
@@ -125,6 +129,33 @@ key input directly.
   marks with a sentinel fallback, anchoring each block's grid rows to stable row
   indices so they never drift as new output scrolls in.
 
+### Input editing, scrollback & status bar (sprint 005)
+- **FR-S01** Provide readline-style input editing scoped to the caret's current
+  line: Home/End (line start/end), Ctrl+Left/Right (word motion), Ctrl+U/K
+  (kill to line start/end), and Ctrl+W (delete the word before the cursor) —
+  none crossing a newline.
+- **FR-S02** Keyboard text selection in the input pad: Shift+Left/Right by a
+  character and Shift+Ctrl+Left/Right by a word; plain motion or editing
+  collapses it.
+- **FR-S03** Treat pasted input as a single unit (bracketed paste), normalizing
+  line endings without submitting on embedded newlines.
+- **FR-S04** Resolve key chords through a named-action registry surfaced by
+  `/keys`; reserved whole-buffer motions are named but unbound this sprint.
+- **FR-S05** Maintain at most **one** text selection across the input pad and
+  transcript: starting a selection in one clears the other.
+- **FR-S06** `Ctrl+C` copies an active selection (and clears it); with no
+  selection it sends SIGINT. `Esc` cancels a selection, else clears the current
+  line; `Esc Esc` clears a multiline buffer and the status message (no timers).
+- **FR-S07** Render a fixed single-line status bar below the input pad with a
+  4-column mode field (`norm` default), the cwd (following `cd`), a transient
+  message, and the last exit code (right-anchored); it never wraps — the message
+  is elided first, then the cwd is middle-ellipsized — and auto-hides below 10
+  rows or when disabled via `/status` (`[status] enabled`).
+- **FR-S08** Draw a configurable divider rule directly above the input pad
+  (`[divider] enabled`).
+- **FR-S09** Keep a status message visible until the next Enter submission or an
+  `Esc Esc`, never on a timeout.
+
 ## 3. Key Entities
 
 - **Block** — one command + retained output + exit code, plus its grid
@@ -138,7 +169,8 @@ key input directly.
 - **Session / Transcript** — ordered list of blocks; drives caps and chrome.
 - **Input History** — kapollo's own ordered list of submitted inputs.
 - **Configuration** — shell, leader char, output caps, and the `mouse`,
-  `clipboard`, and `scroll` settings; defaults when absent.
+  `clipboard`, `scroll` (incl. `context_lines`), `status`, and `divider`
+  settings; defaults when absent.
 - **Shell Session** — the wrapped shell process in a PTY with the injected hook.
 
 ## 4. Success Criteria

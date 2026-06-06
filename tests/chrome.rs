@@ -1,8 +1,6 @@
-//! Chrome redesign tests (US2): borderless transcript, a single status rule
-//! above the input carrying cwd and a conditional non-zero exit code, a blank
-//! line between blocks, and a colorized `λ` prompt prefix (FR-005…FR-011).
-
-use std::path::Path;
+//! Chrome redesign tests (US2): borderless transcript, a blank line between
+//! blocks, a colorized `λ` prompt prefix, and the split-pad layout with the
+//! fixed status bar pinned beneath the input (FR-005…FR-011, FR-017).
 
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
@@ -10,7 +8,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::Terminal;
 
 use kapollo::session::Block;
-use kapollo::ui::{status, transcript};
+use kapollo::ui::transcript;
 
 fn block(id: u64, command: &str, output: &[u8], exit: Option<i32>) -> Block {
     let mut b = Block::new(id, command.to_string(), 1 << 20, 50_000);
@@ -19,24 +17,57 @@ fn block(id: u64, command: &str, output: &[u8], exit: Option<i32>) -> Block {
     b
 }
 
-// --- Layout: single rule above input, no transcript border (FR-005/006) ---
+// --- Layout: transcript, dividing rule, input, fixed bottom status bar ---
 
 #[test]
-fn status_rule_is_one_line_directly_above_input() {
+fn full_chrome_stacks_transcript_divider_input_status() {
     let area = ratatui::layout::Rect::new(0, 0, 80, 24);
-    let [transcript_rect, status_rect, input_rect] = kapollo::ui::split_layout(area, 3);
-    assert_eq!(status_rect.height, 1, "status rule must be a single line");
+    let layout = kapollo::ui::chrome_layout(area, 3, true, true);
+    let divider_rect = layout.divider.expect("divider present when enabled");
+    let status_rect = layout.status.expect("status present when enabled");
+
+    // transcript → divider → input → status, each directly below the last.
+    assert_eq!(
+        layout.transcript.y + layout.transcript.height,
+        divider_rect.y,
+        "divider must sit directly below the transcript"
+    );
+    assert_eq!(divider_rect.height, 1, "divider is a single line");
+    assert_eq!(
+        divider_rect.y + divider_rect.height,
+        layout.input.y,
+        "input must sit directly below the divider"
+    );
+    assert_eq!(
+        layout.input.y + layout.input.height,
+        status_rect.y,
+        "status bar must sit directly below the input"
+    );
     assert_eq!(
         status_rect.y + status_rect.height,
-        input_rect.y,
-        "status rule must sit directly above the input"
+        area.y + area.height,
+        "status bar must be pinned to the very bottom"
+    );
+    assert_eq!(status_rect.height, 1, "status bar must be a single line");
+    assert_eq!(layout.input.height, 3, "input height is passed through");
+}
+
+#[test]
+fn divider_and_status_are_omitted_when_disabled() {
+    let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+    let layout = kapollo::ui::chrome_layout(area, 3, false, false);
+    assert!(layout.divider.is_none(), "no divider when disabled");
+    assert!(layout.status.is_none(), "no status when disabled");
+    assert_eq!(
+        layout.transcript.y + layout.transcript.height,
+        layout.input.y,
+        "input sits directly below the transcript when both are off"
     );
     assert_eq!(
-        transcript_rect.y + transcript_rect.height,
-        status_rect.y,
-        "transcript must sit directly above the status rule"
+        layout.input.y + layout.input.height,
+        area.y + area.height,
+        "input runs to the bottom when no status bar"
     );
-    assert_eq!(input_rect.height, 3, "input height is passed through");
 }
 
 #[test]
@@ -160,33 +191,4 @@ fn output_tabs_are_expanded_to_spaces() {
     );
     // `one` (3 cols) → tab stop 8 → `one` + 5 spaces + `two`.
     assert_eq!(output_line, "one     two     three");
-}
-
-// --- Status rule: cwd always, exit code only when non-zero (FR-007/008) ---
-
-#[test]
-fn status_shows_cwd() {
-    let line = status::line(Path::new("/tmp/work"), Some(0), true);
-    assert!(line.to_string().contains("/tmp/work"));
-}
-
-#[test]
-fn status_hides_zero_exit_code() {
-    let line = status::line(Path::new("/tmp"), Some(0), true).to_string();
-    assert!(
-        !line.contains("exit"),
-        "exit code shown for success: {line:?}"
-    );
-}
-
-#[test]
-fn status_hides_absent_exit_code() {
-    let line = status::line(Path::new("/tmp"), None, true).to_string();
-    assert!(!line.contains("exit"), "exit shown when absent: {line:?}");
-}
-
-#[test]
-fn status_shows_nonzero_exit_code() {
-    let line = status::line(Path::new("/tmp"), Some(7), true).to_string();
-    assert!(line.contains('7'), "non-zero exit code not shown: {line:?}");
 }

@@ -59,6 +59,9 @@ under your XDG state directory. Raise verbosity with `-v`/`--verbose` (or the
 kapollo reads `~/.config/kapollo/config.toml` if present (see
 [usage.md](usage.md) for the full schema). It runs with sensible defaults when
 the file is absent. The top-level keys are `shell`, `leader_char`,
-`prompt_char`, `prompt_color`, and the `[caps]`, `[mouse]`, `[clipboard]`, and
-`[scroll]` tables. A `prompt_char` must be a single character; an unknown
-`prompt_color` name logs a warning and falls back to the default.
+`prompt_char`, `prompt_color`, and the `[caps]`, `[mouse]`, `[clipboard]`,
+`[scroll]`, `[status]`, and `[divider]` tables. The `[scroll]` table adds
+`context_lines` (overlap kept when paging, default 3); `[status] enabled`
+(default true) shows the fixed status bar and `[divider] enabled` (default true)
+draws the rule above the input pad. A `prompt_char` must be a single character;
+an unknown `prompt_color` name logs a warning and falls back to the default.
