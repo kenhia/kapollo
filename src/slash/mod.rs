@@ -18,6 +18,8 @@ pub enum SlashCommand {
     Status,
     /// `/keys` — list the active key bindings (sprint 005, FR-030).
     Keys,
+    /// `/reload-config` — re-read configuration on demand (sprint 006, FR-015).
+    ReloadConfig,
 }
 
 /// The result of dispatching a slash-command string (leader already stripped).
@@ -41,6 +43,7 @@ pub fn dispatch(command: &str) -> Dispatch {
         "quit" | "exit" => Dispatch::Command(SlashCommand::Quit),
         "status" => Dispatch::Command(SlashCommand::Status),
         "keys" => Dispatch::Command(SlashCommand::Keys),
+        "reload-config" => Dispatch::Command(SlashCommand::ReloadConfig),
         other => {
             let token = other.split_whitespace().next().unwrap_or("").to_string();
             Dispatch::Unknown(token)
@@ -59,6 +62,14 @@ mod tests {
         assert_eq!(dispatch("quit"), Dispatch::Command(SlashCommand::Quit));
         assert_eq!(dispatch("status"), Dispatch::Command(SlashCommand::Status));
         assert_eq!(dispatch("keys"), Dispatch::Command(SlashCommand::Keys));
+    }
+
+    #[test]
+    fn dispatches_reload_config() {
+        assert_eq!(
+            dispatch("reload-config"),
+            Dispatch::Command(SlashCommand::ReloadConfig)
+        );
     }
 
     #[test]

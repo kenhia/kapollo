@@ -450,3 +450,51 @@ coords, promoted from the 003 spike), `src/clipboard.rs` (new, promoted),
 `src/session/store.rs` (new: block store); `output/`, `ui/transcript.rs`,
 `session/block.rs`, `app.rs`, `config.rs` reworked; PTY, slash, input router,
 chrome, shell hooks kept (Path A in-place rework).
+
+## 14. Keymap Engine (sprint 006, `006-keymap-engine`)
+
+The hardcoded key→action match in the input layer is replaced by a data-driven
+keymap so users can rebind editing and scrolling actions (FR-001…FR-019). The
+engine lives in `src/action/mod.rs`.
+
+### 14.1 Model
+- **`Action`** — an enum of every rebindable command (cursor motion, selection,
+  kills, scrolling, newline insertion, keyboard copy). `Action::name()` /
+  `Action::from_name()` are the stable string keys used in config and `/keys`.
+- **`KeySpec`** — a parsed key: a single `KeyChord` or the `Esc Esc` gesture (the
+  only multi-key sequence this sprint). `KeySpec::parse()` is case-insensitive
+  and modifier-order-free; `display()` round-trips back to canonical text.
+- **`Binding`** — an action's `primary` and optional `alternate` `KeySpec`; a
+  *cleared* binding (no keys) disables the action (FR-011).
+- **`Keymap`** — an ordered `(Action, Binding)` table. `default_map()` is the
+  zero-config map (the data-fied sprint-005 bindings plus the 006 additions) and
+  MUST reproduce prior behavior (FR-002). `with_overrides()` overlays user
+  bindings, re-declaring overridden actions last so a user binding wins a
+  same-key conflict (R7); `resolve()` keeps the **last** matching entry, giving
+  last-declared-wins (FR-010). `warn_conflicts()` logs distinct-action key
+  collisions (a binding whose own primary/alternate collapse is not a conflict).
+- **`Keymaps`** — the `default` map plus a `modes` map keyed by mode name.
+  `for_mode()` falls back to the default for an unlisted mode. The only mode this
+  sprint is `norm` (the default), so `[keymap.norm]` folds into the default map
+  and any other mode section is warned and ignored (FR-013).
+
+### 14.2 Config surface (`config.rs`)
+`build_keymaps()` parses the `[keymap]` table: top-level (and `[keymap.norm]`)
+entries become default-mode overrides. A string sets the primary; a two-element
+array adds an alternate; an empty string/array clears. Unknown action names and
+unparseable keys are warned and skipped, never fatal (FR-013). The `toml`
+`preserve_order` feature keeps config document order so last-declared-wins is
+honored. `docs/keymap-defaults.toml` is a published reference that a test
+(`tests/keymap_defaults_doc.rs`) asserts rebuilds `Keymap::default_map()` exactly
+(FR-019).
+
+### 14.3 Runtime (`app.rs`)
+The input handler resolves an unmatched chord through
+`config.keymaps.for_mode("norm").resolve(...)` and dispatches the returned
+`Action`. Context-sensitive keys (`Enter` submit, `Ctrl+C`, `Esc`/`Esc Esc`,
+printable insertion) stay special-cased. `/keys` lists the live effective map
+(including `(unbound)` rows and the `Esc Esc` gesture); `/reload-config`
+re-reads the config file on demand, swapping the effective config + keymap only
+on success and reporting (but keeping the previous map on) a malformed file —
+never disturbing the in-progress input buffer (FR-015…FR-017). The resolved
+config path is retained on `App` so reload can re-read it.

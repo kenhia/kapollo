@@ -12,6 +12,7 @@ pub fn help_text(leader: char) -> String {
          \x20 {leader}clear    Clear the visible transcript.\n\
          \x20 {leader}status   Toggle the fixed status bar.\n\
          \x20 {leader}keys     List the active key bindings.\n\
+         \x20 {leader}reload-config  Re-read the config file (keymap included).\n\
          \x20 {leader}quit     Exit kapollo and restore the terminal.\n\
          \x20 {leader}exit     Alias for {leader}quit.\n\
          \n\
@@ -41,6 +42,11 @@ mod tests {
         assert!(text.contains("/help"));
         assert!(text.contains("/clear"));
         assert!(text.contains("/quit"));
+    }
+
+    #[test]
+    fn help_text_mentions_reload_config() {
+        assert!(help_text('/').contains("/reload-config"));
     }
 
     #[test]

@@ -60,8 +60,11 @@ fn run_app(opts: RunOpts) -> anyhow::Result<()> {
     // keeps the background appender thread alive for the duration of the run.
     let _log_guard = logging::init(opts.verbose).context("failed to initialize logging")?;
 
+    // Resolve the config path once so `/reload-config` can re-read it later
+    // (research R6); falls back to the default XDG location.
+    let config_path = opts.config.clone().or_else(config::default_config_path);
     let mut config =
-        Config::load(opts.config.as_deref()).context("failed to load configuration")?;
+        Config::load(config_path.as_deref()).context("failed to load configuration")?;
     if let Some(shell) = opts.shell {
         config.shell = Some(shell);
     }
@@ -80,7 +83,7 @@ fn run_app(opts: RunOpts) -> anyhow::Result<()> {
     let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
     let mut terminal = ratatui::Terminal::new(backend).context("failed to create terminal")?;
 
-    let mut app = App::new(config).context("failed to start kapollo")?;
+    let mut app = App::new(config, config_path).context("failed to start kapollo")?;
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.run(&mut terminal)));
 
     match outcome {

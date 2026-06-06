@@ -156,6 +156,30 @@ key input directly.
 - **FR-S09** Keep a status message visible until the next Enter submission or an
   `Esc Esc`, never on a timeout.
 
+### Configurable keymap engine (sprint 006)
+- **FR-S10** Resolve every rebindable editing/scrolling action through a
+  data-driven keymap; the zero-config map reproduces the prior hardcoded
+  behavior exactly (no config required).
+- **FR-S11** Let a `[keymap]` config table rebind any action by name to a
+  **primary** key (string) and an optional **alternate** (two-element array);
+  modifier names are case-insensitive and order-free, with full `Ctrl`/`Alt`/
+  `Shift` names. The only multi-key sequence is `Esc Esc`.
+- **FR-S12** Treat an empty string or empty array as **clearing** (disabling) an
+  action; `/keys` shows it as `(unbound)`.
+- **FR-S13** When two actions bind the same key, the **last declared** in config
+  order wins; conflicts are logged.
+- **FR-S14** Tolerate unknown action names, unparseable keys, and unknown
+  per-mode sections: log and ignore them; never fail to start.
+- **FR-S15** Support per-mode overrides via `[keymap.<mode>]`, inheriting the
+  default map for unlisted actions; this sprint the only mode is `norm` (the
+  default).
+- **FR-S16** Surface the live effective bindings via `/keys` and re-read the
+  config on demand via `/reload-config`, applying changes without restart,
+  keeping the previous config (with a reported error) on a malformed file, and
+  never disturbing the in-progress input buffer.
+- **FR-S17** Publish `docs/keymap-defaults.toml` listing every action's default,
+  kept in sync with the code by an automated test.
+
 ## 3. Key Entities
 
 - **Block** — one command + retained output + exit code, plus its grid
@@ -171,6 +195,9 @@ key input directly.
 - **Configuration** — shell, leader char, output caps, and the `mouse`,
   `clipboard`, `scroll` (incl. `context_lines`), `status`, and `divider`
   settings; defaults when absent.
+- **Keymap** — the data-driven `Action` → `Binding` (primary + optional
+  alternate) table, with a zero-config default map, `[keymap]` overrides
+  (clear/rebind, last-declared-wins), and per-mode (`norm`) sections.
 - **Shell Session** — the wrapped shell process in a PTY with the injected hook.
 
 ## 4. Success Criteria
@@ -194,6 +221,7 @@ key input directly.
 - **In scope (MVP)**: Linux; fish + bash; US1 (run loop), US2 (multiline +
   history), US3 (passthrough), US4 (interrupt/control/exit). Sprint 004 adds the
   native terminal grid, mouse selection/copy, and the canonical block store.
+  Sprint 006 adds the configurable keymap engine (`[keymap]`, `/reload-config`,
+  live `/keys`).
 - **Out of scope**: macOS/Windows, history DB persistence, AI layer, `/save`,
-  `/filter` (deferred; tracked separately), fuzzy search, markdown rendering,
-  newline-key remapping.
+  `/filter` (deferred; tracked separately), fuzzy search, markdown rendering.

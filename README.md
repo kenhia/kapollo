@@ -47,14 +47,18 @@ _A screenshot/cast will be added here._
 - **Scrollback** — page and line scroll the transcript (PageUp/PageDown,
   Shift+PageUp/PageDown) with top/bottom jumps (Shift+Home/End), keeping a
   configurable few lines of overlap when paging.
+- **Configurable keymap** — rebind any editing/scrolling action via a `[keymap]`
+  config table (primary + optional alternate, disable-by-clearing), reload it
+  live with `/reload-config`, and inspect the effective bindings with `/keys`.
+  See [docs/keymap-defaults.toml](docs/keymap-defaults.toml) for every default.
 - **Input history** — kapollo's own Up/Down history, separate from the shell's.
 - **Full-screen passthrough** — `vim`, `less`, `top` run natively with stdin
   forwarded verbatim; the split-pad UI is restored cleanly on exit.
 - **Clean transcript** — borderless pads, a colorized `λ` prompt echoing each
   command, a divider rule above the input, and a fixed status bar showing a mode
   field, the cwd (following `cd`), transient messages, and the last exit code.
-- **Slash commands** — `/help`, `/clear`, `/status`, `/keys`, `/quit` (and
-  `/exit`), with a `//` escape for a literal leader.
+- **Slash commands** — `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
+  `/quit` (and `/exit`), with a `//` escape for a literal leader.
 - **Safe by default** — Ctrl-C interrupts the running command (not kapollo); the
   terminal is always restored on exit, error, and panic.
 
@@ -113,7 +117,14 @@ the cursor with its command), the wheel scrolls, and Shift bypasses to the host
 terminal's native selection. Copy prefers OSC 52 (SSH-friendly) with a local
 clipboard fallback.
 
-Slash commands: `/help`, `/clear`, `/status`, `/keys`, `/quit` (alias `/exit`).
+Every key in the table above is a default that you can rebind in a `[keymap]`
+config table; `/reload-config` re-reads the config without restarting and
+`/keys` always shows the live effective bindings. See
+[docs/keymap-defaults.toml](docs/keymap-defaults.toml) for a copy-paste-ready
+list of every action and [docs/usage.md](docs/usage.md) for the syntax.
+
+Slash commands: `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
+`/quit` (alias `/exit`).
 See [docs/usage.md](docs/usage.md) for the configuration schema and full details.
 
 ## Documentation

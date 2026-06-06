@@ -1,0 +1,52 @@
+# kapollo keymap defaults (sprint 006)
+#
+# This file lists EVERY rebindable action with its built-in default binding.
+# It is a copy-paste-ready reference: drop a `[keymap]` table into your kapollo
+# config (see `docs/setup.md`) and change only the lines you care about — any
+# action you omit keeps the default shown here.
+#
+# Binding syntax:
+#   * A string binds the primary key:           word_move_left = "Ctrl+B"
+#   * A two-element array adds an alternate:     insert_newline = ["Shift+Enter", "Alt+Enter"]
+#   * An empty string or empty array disables:   scroll_to_top = ""   # unbound
+#   * Modifiers are case-insensitive and order-free: "ctrl+shift+left" == "Shift+Ctrl+Left"
+#   * Short modifier names are NOT accepted (use Ctrl / Alt / Shift, not C / M / S).
+#
+# Per-mode overrides live under `[keymap.<mode>]`; this sprint the only mode is
+# `norm` (the default), so `[keymap.norm]` targets the same map as `[keymap]`.
+#
+# The `Esc Esc` gesture that clears the status message (`clear_status_message`)
+# is contextual and is not rebindable here; it is shown by `/keys` for reference.
+
+[keymap]
+# Cursor movement within the input line.
+line_move_start = "Home"
+line_move_end = "End"
+word_move_left = "Ctrl+Left"
+word_move_right = "Ctrl+Right"
+
+# Selection.
+select_char_left = "Shift+Left"
+select_char_right = "Shift+Right"
+select_word_left = "Ctrl+Shift+Left"
+select_word_right = "Ctrl+Shift+Right"
+
+# Line editing / kill-ring.
+kill_to_line_start = "Ctrl+U"
+kill_to_line_end = "Ctrl+K"
+delete_word_before = "Ctrl+W"
+
+# Transcript scrolling.
+scroll_page_up = "PageUp"
+scroll_page_down = "PageDown"
+scroll_line_up = "Shift+PageUp"
+scroll_line_down = "Shift+PageDown"
+scroll_to_top = "Shift+Home"
+scroll_to_bottom = "Shift+End"
+
+# Multiline input: a primary + alternate so either chord inserts a newline.
+insert_newline = ["Shift+Enter", "Alt+Enter"]
+
+# Keyboard copy variants.
+copy_current_line = "Ctrl+Y"
+copy_block_without_command = "Alt+Y"

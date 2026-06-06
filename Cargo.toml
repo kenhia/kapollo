@@ -41,7 +41,10 @@ wezterm-term = { git = "https://github.com/wezterm/wezterm.git", rev = "577474d8
 base64 = "0.22"
 arboard = "3.6"
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+# `preserve_order` keeps `[keymap]` entries in document order so a same-key
+# conflict resolves to the last-declared binding (FR-010). indexmap is already
+# in the dependency tree, so this enables an existing dep's feature only.
+toml = { version = "0.8", features = ["preserve_order"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
