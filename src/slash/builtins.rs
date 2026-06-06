@@ -10,14 +10,16 @@ pub fn help_text(leader: char) -> String {
         "kapollo slash commands (leader '{leader}'):\n\
          \x20 {leader}help     Show this help.\n\
          \x20 {leader}clear    Clear the visible transcript.\n\
+         \x20 {leader}status   Toggle the fixed status bar.\n\
+         \x20 {leader}keys     List the active key bindings.\n\
          \x20 {leader}quit     Exit kapollo and restore the terminal.\n\
          \x20 {leader}exit     Alias for {leader}quit.\n\
          \n\
-         Keys:\n\
+         Keys (run '{leader}keys' for the full list):\n\
          \x20 Enter            Submit the current input.\n\
          \x20 Ctrl-C           Interrupt the running command (not kapollo).\n\
          \x20 PageUp/PageDown  Scroll the transcript a page at a time.\n\
-         \x20 Home/End         Jump to the oldest / newest output.\n\
+         \x20 Shift+Home/End   Jump to the oldest / newest output.\n\
          \n\
          To send literal input beginning with '{leader}', double it \
          (e.g. '{leader}{leader}path')."

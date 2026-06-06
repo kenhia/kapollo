@@ -29,6 +29,13 @@ const DEFAULT_CLIPBOARD_OSC52: bool = true;
 const DEFAULT_CLIPBOARD_LOCAL_FALLBACK: bool = true;
 const DEFAULT_WHEEL_LINES: u16 = 3;
 const DEFAULT_SCROLLBACK_LINES: u64 = 10_000;
+// Sprint 005 surface defaults: the fixed status bar is shown, and page
+// scrolling keeps three lines of context across a page boundary.
+const DEFAULT_STATUS_ENABLED: bool = true;
+const DEFAULT_CONTEXT_LINES: u16 = 3;
+// The cosmetic dividing rule between the output and input pads (the Apollo /
+// Domain OS lineage) is shown by default.
+const DEFAULT_DIVIDER_ENABLED: bool = true;
 
 const TOP_LEVEL_KEYS: &[&str] = &[
     "shell",
@@ -39,6 +46,8 @@ const TOP_LEVEL_KEYS: &[&str] = &[
     "mouse",
     "clipboard",
     "scroll",
+    "status",
+    "divider",
 ];
 const CAPS_KEYS: &[&str] = &[
     "per_block_bytes",
@@ -48,7 +57,9 @@ const CAPS_KEYS: &[&str] = &[
 ];
 const MOUSE_KEYS: &[&str] = &["enabled", "copy_on_select"];
 const CLIPBOARD_KEYS: &[&str] = &["osc52", "local_fallback"];
-const SCROLL_KEYS: &[&str] = &["wheel_lines", "scrollback_lines"];
+const SCROLL_KEYS: &[&str] = &["wheel_lines", "scrollback_lines", "context_lines"];
+const STATUS_KEYS: &[&str] = &["enabled"];
+const DIVIDER_KEYS: &[&str] = &["enabled"];
 
 /// Effective kapollo configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +81,10 @@ pub struct Config {
     pub clipboard: Clipboard,
     /// Scroll / scrollback behavior (sprint 004).
     pub scroll: Scroll,
+    /// Fixed status bar behavior (sprint 005).
+    pub status: Status,
+    /// Cosmetic dividing rule between the output and input pads (sprint 005).
+    pub divider: Divider,
 }
 
 /// Mouse capture / selection behavior (FR-013, FR-017).
@@ -99,6 +114,23 @@ pub struct Scroll {
     pub wheel_lines: u16,
     /// Number of scrollback lines the grid retains.
     pub scrollback_lines: u64,
+    /// Lines of overlap kept when paging through scrollback (sprint 005).
+    pub context_lines: u16,
+}
+
+/// Fixed status bar behavior (sprint 005).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Status {
+    /// Whether the fixed status bar below the input pad is shown.
+    pub enabled: bool,
+}
+
+/// Cosmetic dividing rule between the output and input pads (sprint 005). Purely
+/// decorative today; it is the visual lineage back to Apollo / Domain OS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Divider {
+    /// Whether the dividing rule above the input pad is shown.
+    pub enabled: bool,
 }
 
 /// Output retention caps (ring-buffer semantics; FR-016).
@@ -121,6 +153,8 @@ impl Default for Config {
             mouse: Mouse::default(),
             clipboard: Clipboard::default(),
             scroll: Scroll::default(),
+            status: Status::default(),
+            divider: Divider::default(),
         }
     }
 }
@@ -148,6 +182,23 @@ impl Default for Scroll {
         Self {
             wheel_lines: DEFAULT_WHEEL_LINES,
             scrollback_lines: DEFAULT_SCROLLBACK_LINES,
+            context_lines: DEFAULT_CONTEXT_LINES,
+        }
+    }
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_STATUS_ENABLED,
+        }
+    }
+}
+
+impl Default for Divider {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_DIVIDER_ENABLED,
         }
     }
 }
@@ -219,6 +270,8 @@ struct RawConfig {
     mouse: Option<RawMouse>,
     clipboard: Option<RawClipboard>,
     scroll: Option<RawScroll>,
+    status: Option<RawStatus>,
+    divider: Option<RawDivider>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -237,6 +290,17 @@ struct RawClipboard {
 struct RawScroll {
     wheel_lines: Option<u16>,
     scrollback_lines: Option<u64>,
+    context_lines: Option<u16>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawStatus {
+    enabled: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawDivider {
+    enabled: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -340,6 +404,21 @@ impl RawConfig {
                 Scroll {
                     wheel_lines: raw.wheel_lines.unwrap_or(d.wheel_lines),
                     scrollback_lines: raw.scrollback_lines.unwrap_or(d.scrollback_lines),
+                    context_lines: raw.context_lines.unwrap_or(d.context_lines),
+                }
+            },
+            status: {
+                let raw = self.status.unwrap_or_default();
+                let d = Status::default();
+                Status {
+                    enabled: raw.enabled.unwrap_or(d.enabled),
+                }
+            },
+            divider: {
+                let raw = self.divider.unwrap_or_default();
+                let d = Divider::default();
+                Divider {
+                    enabled: raw.enabled.unwrap_or(d.enabled),
                 }
             },
         })
@@ -377,6 +456,20 @@ fn warn_unknown_keys(table: &toml::Table) {
         for key in scroll.keys() {
             if !SCROLL_KEYS.contains(&key.as_str()) {
                 tracing::warn!(key = %key, "unknown config key in [scroll] ignored");
+            }
+        }
+    }
+    if let Some(toml::Value::Table(status)) = table.get("status") {
+        for key in status.keys() {
+            if !STATUS_KEYS.contains(&key.as_str()) {
+                tracing::warn!(key = %key, "unknown config key in [status] ignored");
+            }
+        }
+    }
+    if let Some(toml::Value::Table(divider)) = table.get("divider") {
+        for key in divider.keys() {
+            if !DIVIDER_KEYS.contains(&key.as_str()) {
+                tracing::warn!(key = %key, "unknown config key in [divider] ignored");
             }
         }
     }

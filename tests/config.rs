@@ -89,3 +89,54 @@ fn unknown_prompt_color_falls_back_to_default() {
         .expect("unknown color must warn-and-default, not error");
     assert_eq!(cfg.prompt_color, ratatui::style::Color::Red);
 }
+
+#[test]
+fn status_and_context_lines_default() {
+    // Sprint 005 surface defaults (FR-026, US3): status bar on, 3 lines overlap.
+    let cfg = Config::default();
+    assert!(cfg.status.enabled);
+    assert_eq!(cfg.scroll.context_lines, 3);
+}
+
+#[test]
+fn status_and_context_lines_parse() {
+    let cfg = Config::from_toml(
+        "[status]\nenabled = false\n[scroll]\ncontext_lines = 5\n",
+        Path::new("test.toml"),
+    )
+    .expect("sprint 005 keys should parse");
+    assert!(!cfg.status.enabled);
+    assert_eq!(cfg.scroll.context_lines, 5);
+    // Existing scroll keys keep their defaults (FR-033).
+    assert_eq!(cfg.scroll.wheel_lines, 3);
+}
+
+#[test]
+fn unknown_status_key_is_ignored() {
+    let cfg = Config::from_toml(
+        "[status]\nenabled = true\nbogus = 1\n",
+        Path::new("test.toml"),
+    )
+    .expect("unknown [status] key must be ignored, not fatal");
+    assert!(cfg.status.enabled);
+}
+
+#[test]
+fn divider_defaults_on_and_parses() {
+    // The cosmetic dividing rule is shown by default (Apollo / Domain OS
+    // lineage) and can be turned off via [divider].
+    assert!(Config::default().divider.enabled);
+    let cfg = Config::from_toml("[divider]\nenabled = false\n", Path::new("test.toml"))
+        .expect("[divider] should parse");
+    assert!(!cfg.divider.enabled);
+}
+
+#[test]
+fn unknown_divider_key_is_ignored() {
+    let cfg = Config::from_toml(
+        "[divider]\nenabled = true\nbogus = 1\n",
+        Path::new("test.toml"),
+    )
+    .expect("unknown [divider] key must be ignored, not fatal");
+    assert!(cfg.divider.enabled);
+}

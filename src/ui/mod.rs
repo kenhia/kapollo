@@ -1,7 +1,9 @@
 //! UI layer: terminal lifecycle (RAII guard + panic hook) and the split-pad
-//! layout. Per-widget rendering lives in the `transcript`, `input_pad`, and
-//! `status` submodules; full-screen handoff lives in `passthrough` (US3).
+//! layout. Per-widget rendering lives in the `transcript`, `input_pad`,
+//! `divider`, and `status` submodules; full-screen handoff lives in
+//! `passthrough` (US3).
 
+pub mod divider;
 pub mod input_pad;
 pub mod passthrough;
 pub mod status;
@@ -11,14 +13,14 @@ use std::io::{self, Write};
 
 use crossterm::cursor::{Hide, Show};
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
-    PushKeyboardEnhancementFlags,
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Frame;
 
 use crate::app::App;
@@ -61,7 +63,13 @@ impl TerminalGuard {
     pub fn enter() -> io::Result<Self> {
         enable_raw_mode()?;
         let mut out = io::stdout();
-        execute!(out, EnterAlternateScreen, Hide, EnableMouseCapture)?;
+        execute!(
+            out,
+            EnterAlternateScreen,
+            Hide,
+            EnableMouseCapture,
+            EnableBracketedPaste
+        )?;
         // Ignore errors: terminals without the protocol simply fall back to
         // Alt+Enter for newline insertion.
         let _ = execute!(
@@ -76,7 +84,13 @@ impl TerminalGuard {
     pub fn restore() -> io::Result<()> {
         let mut out = io::stdout();
         let _ = execute!(out, PopKeyboardEnhancementFlags);
-        execute!(out, DisableMouseCapture, LeaveAlternateScreen, Show)?;
+        execute!(
+            out,
+            DisableBracketedPaste,
+            DisableMouseCapture,
+            LeaveAlternateScreen,
+            Show
+        )?;
         disable_raw_mode()?;
         out.flush()?;
         Ok(())
@@ -102,22 +116,52 @@ pub fn install_panic_hook() {
     }));
 }
 
-/// Compute the split-pad layout: the transcript fills the remaining space, a
-/// single-line status rule sits directly above the input, and the input pad
-/// occupies `input_height` lines at the bottom. Returns
-/// `[transcript, status_rule, input]` (FR-005, FR-006).
-pub fn split_layout(area: ratatui::layout::Rect, input_height: u16) -> [ratatui::layout::Rect; 3] {
-    let chunks = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(1),
-        Constraint::Length(input_height),
-    ])
-    .split(area);
-    [chunks[0], chunks[1], chunks[2]]
+/// The chrome rows laid out beneath (and around) the transcript pane. The
+/// `divider` and `status` rects are present only when their chrome is shown.
+pub struct ChromeLayout {
+    pub transcript: Rect,
+    pub divider: Option<Rect>,
+    pub input: Rect,
+    pub status: Option<Rect>,
 }
 
-/// Render the split-pad layout: borderless transcript on top, a single status
-/// rule, then the input pad at the bottom.
+/// Compute the split-pad layout: the transcript fills the remaining space, an
+/// optional dividing rule sits directly above the input pad, the input pad
+/// occupies `input_height` lines, and an optional fixed status bar is pinned to
+/// the very bottom (FR-005, FR-017).
+pub fn chrome_layout(area: Rect, input_height: u16, divider: bool, status: bool) -> ChromeLayout {
+    let mut constraints = vec![Constraint::Min(1)];
+    if divider {
+        constraints.push(Constraint::Length(1));
+    }
+    constraints.push(Constraint::Length(input_height));
+    if status {
+        constraints.push(Constraint::Length(1));
+    }
+    let chunks = Layout::vertical(constraints).split(area);
+
+    let mut idx = 0;
+    let transcript = chunks[idx];
+    idx += 1;
+    let divider = divider.then(|| {
+        let r = chunks[idx];
+        idx += 1;
+        r
+    });
+    let input = chunks[idx];
+    idx += 1;
+    let status = status.then(|| chunks[idx]);
+    ChromeLayout {
+        transcript,
+        divider,
+        input,
+        status,
+    }
+}
+
+/// Render the split-pad layout: borderless transcript on top, the dividing rule,
+/// the input pad, then the fixed status bar pinned to the bottom (each piece
+/// hidden per config / a short terminal).
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
@@ -140,12 +184,19 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // The input pad is borderless now, so its height is just its line count.
     let input_height = input_pad_height(&app.input);
+    let show_divider = app.config.divider.enabled;
+    // The status bar is opt-out and hidden on a short terminal (FR-022, FR-026).
+    let show_status = status::is_visible(app.config.status.enabled, area.height);
 
-    let [transcript_area, status_area, input_area] = split_layout(area, input_height);
-
-    render_transcript(frame, transcript_area, app);
-    render_status(frame, status_area, app);
-    render_input(frame, input_area, app);
+    let layout = chrome_layout(area, input_height, show_divider, show_status);
+    render_transcript(frame, layout.transcript, app);
+    if let Some(divider_area) = layout.divider {
+        divider::render(frame, divider_area, color_enabled());
+    }
+    render_input(frame, layout.input, app);
+    if let Some(status_area) = layout.status {
+        render_status(frame, status_area, app);
+    }
 }
 
 fn render_transcript(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

@@ -1,85 +1,179 @@
-//! Status rule rendering: a single horizontal rule above the input carrying the
-//! current working directory (always) and the last exit code (only when
-//! non-zero) (FR-006, FR-007, FR-008).
-
-use std::path::Path;
+//! Fixed status bar (sprint 005, US4): a single non-scrolling row pinned
+//! *beneath* the input pad carrying the mode, working directory, a transient
+//! message, and the last exit code (FR-017..FR-024).
+//!
+//! Layout is `mode | cwd<greedypad>| message | exit`: the 4-column mode field
+//! and its `" | "` separator are always present, a greedy pad sits between the
+//! cwd and the `|` so the right cluster hugs the right edge, and the message is
+//! right-justified against the exit field. Under width pressure the message is
+//! truncated first (trailing ellipsis), then the cwd (middle ellipsis keeping
+//! the trailing component); mode and exit are never broken and the bar never
+//! wraps (FR-019, FR-024).
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use crate::app::App;
 
-/// Build the status rule's content line: the cwd, and the exit code only when
-/// it is non-zero (FR-007, FR-008). A leading rule glyph gives the line its
-/// horizontal-rule appearance; `render` fills the remaining width.
-pub fn line(cwd: &Path, last_exit: Option<i32>, color: bool) -> Line<'static> {
-    let mut spans = vec![
-        Span::raw("── "),
-        Span::raw(cwd.display().to_string()),
-        Span::raw(" "),
-    ];
-    if let Some(code) = last_exit {
-        if code != 0 {
-            spans.push(Span::raw(format!("[exit {code}] ")));
-        }
-    }
-    let mut line = Line::from(spans);
-    if color {
-        line = line.style(Style::default().fg(Color::DarkGray));
-    }
-    line
+/// The mode field is a fixed four columns.
+const MODE_WIDTH: usize = 4;
+/// The default mode literal until richer modes exist.
+pub const DEFAULT_MODE: &str = "norm";
+const ELLIPSIS: char = '…';
+/// Below this terminal height the bar is hidden so a short window keeps every
+/// row for the transcript and input (FR-022).
+pub const MIN_ROWS_FOR_BAR: u16 = 10;
+
+/// Whether the fixed status bar should be shown: it is opt-out via config and
+/// suppressed on a short terminal (FR-022, FR-026).
+pub fn is_visible(enabled: bool, rows: u16) -> bool {
+    enabled && rows >= MIN_ROWS_FOR_BAR
 }
 
-/// Render the status rule into `area`, filling the remaining width with the rule
-/// glyph so it reads as a single horizontal line. A transient `notice` (e.g. a
-/// copy failure) is shown after the cwd in a warning color so it is never
-/// silently dropped (FR-013).
-pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let color = super::color_enabled();
-    let base = line(&app.cwd, app.last_exit, color);
+/// Compose the status bar's single line to exactly `width` columns.
+///
+/// `mode` is normalized to four columns. `message` is an optional transient
+/// notice. `exit` is shown only when `Some` and is never broken (FR-023).
+pub fn fit(
+    width: usize,
+    mode: &str,
+    cwd: &str,
+    message: Option<&str>,
+    exit: Option<i32>,
+) -> String {
+    if width == 0 {
+        return String::new();
+    }
+    let mode4 = fit_mode(mode);
+    let prefix = format!("{mode4} | ");
+    let prefix_len = prefix.chars().count();
+    let exit_str = exit.map(|c| c.to_string());
+    let exit_ref = exit_str.as_deref();
+    let body = width.saturating_sub(prefix_len);
 
-    let mut spans = base.spans.clone();
-    // Reflect the most-recent block's elapsed runtime once it is sealed, beside
-    // the exit indication, so the chrome shows both outcome and duration
-    // (FR-023, T036). A still-running block has no duration yet.
-    if let Some(dur) = app.store.last().and_then(|b| b.duration()) {
-        let mut span = Span::raw(format!("({}) ", format_duration(dur)));
-        if color {
-            span = span.style(Style::default().fg(Color::DarkGray));
+    let cwd_full_len = cwd.chars().count();
+    let pad_min = |rw: usize| usize::from(rw > 0);
+
+    let mut cwd_str = cwd.to_string();
+    let mut msg = message.unwrap_or("").to_string();
+    let mut rw = right_text(&msg, exit_ref).chars().count();
+
+    if cwd_full_len + pad_min(rw) + rw > body {
+        // Step 1: shrink the message, keeping the cwd intact (FR-019 ordering).
+        let avail_right = body.saturating_sub(cwd_full_len + 1);
+        let msg_max = match exit_ref {
+            // right = "| " + msg + " | " + exit → overhead 5 + exit width.
+            Some(e) => avail_right.saturating_sub(5 + e.chars().count()),
+            // right = "| " + msg → overhead 2.
+            None => avail_right.saturating_sub(2),
+        };
+        msg = if msg_max >= 2 {
+            truncate_end(&msg, msg_max)
+        } else {
+            String::new()
+        };
+        rw = right_text(&msg, exit_ref).chars().count();
+
+        // Step 2: if the cwd alone still overflows, middle-ellipsis it.
+        if cwd_full_len + pad_min(rw) + rw > body {
+            let cwd_max = body.saturating_sub(pad_min(rw) + rw);
+            cwd_str = truncate_cwd_middle(cwd, cwd_max);
         }
-        spans.push(span);
-    }
-    // Surface any pending notice prominently before the fill (FR-013).
-    if let Some(notice) = app.notice.as_deref() {
-        let mut span = Span::raw(format!("{notice} "));
-        if color {
-            span = span.style(Style::default().fg(Color::LightRed));
-        }
-        spans.push(span);
     }
 
-    let used = Line::from(spans.clone()).width() as u16;
-    if used < area.width {
-        spans.push(Span::raw("─".repeat((area.width - used) as usize)));
-    }
-    let mut rule = Line::from(spans);
-    if color {
-        rule = rule.style(Style::default().fg(Color::DarkGray));
-    }
-    frame.render_widget(Paragraph::new(rule), area);
-}
+    let right = right_text(&msg, exit_ref);
+    let rw = right.chars().count();
+    let cwd_len = cwd_str.chars().count();
+    let pad = body.saturating_sub(cwd_len + rw).max(pad_min(rw));
 
-/// Format an elapsed command runtime compactly for the status rule: sub-minute
-/// durations as fractional seconds (`0.42s`), longer ones as `1m03s`.
-fn format_duration(d: std::time::Duration) -> String {
-    let secs = d.as_secs_f64();
-    if secs < 60.0 {
-        format!("{secs:.2}s")
+    let mut out = String::with_capacity(width);
+    out.push_str(&prefix);
+    out.push_str(&cwd_str);
+    out.push_str(&" ".repeat(pad));
+    out.push_str(&right);
+
+    let outlen = out.chars().count();
+    if outlen > width {
+        out.chars().take(width).collect()
     } else {
-        let total = d.as_secs();
-        format!("{}m{:02}s", total / 60, total % 60)
+        out.push_str(&" ".repeat(width - outlen));
+        out
     }
+}
+
+/// The right cluster (`| message | exit`, absent pieces elided), introduced by
+/// its `"| "` divider; empty when there is neither a message nor an exit code.
+fn right_text(msg: &str, exit: Option<&str>) -> String {
+    match (msg.is_empty(), exit) {
+        (false, Some(e)) => format!("| {msg} | {e}"),
+        (false, None) => format!("| {msg}"),
+        (true, Some(e)) => format!("| {e}"),
+        (true, None) => String::new(),
+    }
+}
+
+fn fit_mode(mode: &str) -> String {
+    let mut s: String = mode.chars().take(MODE_WIDTH).collect();
+    while s.chars().count() < MODE_WIDTH {
+        s.push(' ');
+    }
+    s
+}
+
+/// Truncate `s` to at most `max` columns, appending an ellipsis (and trimming a
+/// trailing space before it) when shortened.
+fn truncate_end(s: &str, max: usize) -> String {
+    let n = s.chars().count();
+    if n <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    let keep: String = s.chars().take(max - 1).collect();
+    let mut out = keep.trim_end().to_string();
+    out.push(ELLIPSIS);
+    out
+}
+
+/// Truncate `cwd` to at most `max` columns with a middle ellipsis, favoring the
+/// trailing path component so the current directory stays legible.
+fn truncate_cwd_middle(cwd: &str, max: usize) -> String {
+    let n = cwd.chars().count();
+    if n <= max {
+        return cwd.to_string();
+    }
+    if max <= 1 {
+        return ELLIPSIS.to_string();
+    }
+    let avail = max - 1;
+    let tail = avail * 2 / 3;
+    let head = avail - tail;
+    let head_str: String = cwd.chars().take(head).collect();
+    let tail_str: String = cwd.chars().skip(n - tail).collect();
+    format!("{head_str}{ELLIPSIS}{tail_str}")
+}
+
+/// Render the fixed status bar into `area` (a single row beneath the input).
+pub fn render(frame: &mut Frame, area: Rect, app: &App) {
+    let text = fit(
+        area.width as usize,
+        DEFAULT_MODE,
+        &app.cwd.display().to_string(),
+        app.notice.as_deref(),
+        app.last_exit,
+    );
+    let mut line = Line::from(text);
+    if super::color_enabled() {
+        line = line.style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Gray)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+    frame.render_widget(Paragraph::new(line), area);
 }

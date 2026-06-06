@@ -14,6 +14,10 @@ pub enum SlashCommand {
     Clear,
     /// `/quit` — exit kapollo cleanly.
     Quit,
+    /// `/status` — toggle the fixed status bar (sprint 005, FR-026).
+    Status,
+    /// `/keys` — list the active key bindings (sprint 005, FR-030).
+    Keys,
 }
 
 /// The result of dispatching a slash-command string (leader already stripped).
@@ -35,6 +39,8 @@ pub fn dispatch(command: &str) -> Dispatch {
         "help" => Dispatch::Command(SlashCommand::Help),
         "clear" => Dispatch::Command(SlashCommand::Clear),
         "quit" | "exit" => Dispatch::Command(SlashCommand::Quit),
+        "status" => Dispatch::Command(SlashCommand::Status),
+        "keys" => Dispatch::Command(SlashCommand::Keys),
         other => {
             let token = other.split_whitespace().next().unwrap_or("").to_string();
             Dispatch::Unknown(token)
@@ -51,6 +57,8 @@ mod tests {
         assert_eq!(dispatch("help"), Dispatch::Command(SlashCommand::Help));
         assert_eq!(dispatch("clear"), Dispatch::Command(SlashCommand::Clear));
         assert_eq!(dispatch("quit"), Dispatch::Command(SlashCommand::Quit));
+        assert_eq!(dispatch("status"), Dispatch::Command(SlashCommand::Status));
+        assert_eq!(dispatch("keys"), Dispatch::Command(SlashCommand::Keys));
     }
 
     #[test]

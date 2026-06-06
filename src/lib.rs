@@ -2,6 +2,7 @@
 //! real shell. This crate exposes the application as a library so both the
 //! `kapollo` and `kap` binaries can share the same wiring.
 
+pub mod action;
 pub mod app;
 pub mod clipboard;
 pub mod config;
