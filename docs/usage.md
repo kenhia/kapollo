@@ -109,9 +109,52 @@ literal leading leader char to the shell.
 | `/help` | Show available slash commands |
 | `/clear` | Clear the visible transcript |
 | `/status` | Toggle the fixed status bar on or off |
-| `/keys` | List the active key bindings |
+| `/keys` | List the active key bindings (the live, effective keymap) |
+| `/reload-config` | Re-read the config file without restarting; applies keymap and other changes, keeping your in-progress input |
 | `/quit` | Exit kapollo, restoring the terminal cleanly |
 | `/exit` | Alias for `/quit` |
+
+## Configurable key bindings
+
+Every key in the tables above is a **default** you can rebind under a `[keymap]`
+table in your config. Each entry maps an **action name** (e.g. `word_move_left`)
+to one or two keys:
+
+```toml
+[keymap]
+# A string sets the primary key.
+word_move_left = "Ctrl+B"
+# A two-element array adds an alternate; either chord triggers the action.
+insert_newline = ["Shift+Enter", "Alt+Enter"]
+# An empty string (or empty array) disables an action entirely.
+scroll_to_top = ""
+```
+
+Key syntax:
+
+- Modifiers are **case-insensitive** and **order-free**: `"ctrl+shift+left"` is
+  the same as `"Shift+Ctrl+Left"`.
+- Use the full modifier names **Ctrl**, **Alt**, and **Shift** (short forms like
+  `C`/`M`/`S` are not accepted).
+- Keys are named (`Left`, `Home`, `PageUp`, `Enter`, …) or a single character.
+- The only multi-key sequence supported this sprint is `Esc Esc`.
+
+Resolution rules:
+
+- An **unknown action name** or an **unparseable key** is logged and ignored;
+  the rest of the table still applies.
+- If two actions bind the **same** key, the **last one declared** wins.
+- Actions you omit keep their built-in defaults.
+
+Per-mode overrides live under `[keymap.<mode>]`. This sprint the only mode is
+`norm` (the default), so `[keymap.norm]` targets the same map as `[keymap]`; a
+section for any unknown mode is logged and ignored.
+
+Run `/keys` to see the live effective bindings, and `/reload-config` to apply
+edits without restarting (a malformed config is reported and the previous keymap
+is kept; your in-progress input is never disturbed). See
+[keymap-defaults.toml](keymap-defaults.toml) for a copy-paste-ready list of every
+action and its default binding.
 
 ## Configuration
 
@@ -174,6 +217,13 @@ enabled = true
 [divider]
 # Draw a horizontal rule directly above the input pad (default true).
 enabled = true
+
+[keymap]
+# Rebind any editing/scrolling action (see "Configurable key bindings" above
+# and docs/keymap-defaults.toml for every default). Omitted actions keep their
+# defaults; an empty value disables an action.
+word_move_left = "Ctrl+B"
+insert_newline = ["Shift+Enter", "Alt+Enter"]
 ```
 
 When a block exceeds its cap, the oldest output is dropped and a

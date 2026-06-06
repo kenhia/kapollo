@@ -47,11 +47,17 @@ config concern rather than a code change.
 - **Q1 — Config format/location.** TOML table shape, per-mode sections (does the
   keymap vary by mode, anticipating LAAT in 008?), and how alternates are
   expressed (array `["Shift+Enter", "Alt+Enter"]` vs. explicit `alt =`).
+    - Keymap can vary by mode
+    - array `["Shift+Enter", "Alt+Enter"]`
 - **Q2 — Conflict policy.** Hard error and refuse to start, or warn + last-wins?
+    - Warn + last-wins
 - **Q3 — Key-string grammar.** Canonical modifier order and names
   (`Ctrl`/`Control`, `Cmd`/`Super`), case sensitivity, chord support (multi-key
   sequences like `Esc Esc`) — needed because 005 introduces double-`Esc`.
+    - Canonical (prefer short, "Ctrl" over "Control"), case insensitive.
+    - For now at least, I think the only "chord" we should support is the `Esc Esc`
 - **Q4 — Reload.** Live reload on config change, or restart-only?
+    - Live reload, but on demand, not file watching. `/reload-config` or similar
 
 ## Dependencies / sequencing
 

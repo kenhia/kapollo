@@ -35,6 +35,9 @@ const MAX_DRAIN_CHUNKS: usize = 64;
 /// Top-level application state.
 pub struct App {
     pub config: Config,
+    /// The resolved path the config was loaded from, retained so `/reload-config`
+    /// can re-read it (research R6). `None` when no config file location resolved.
+    config_path: Option<std::path::PathBuf>,
     pub transcript: Transcript,
     pub input: InputPad,
     pub last_exit: Option<i32>,
@@ -71,7 +74,7 @@ pub struct App {
 
 impl App {
     /// Construct the application, spawning the wrapped shell.
-    pub fn new(config: Config) -> anyhow::Result<Self> {
+    pub fn new(config: Config, config_path: Option<std::path::PathBuf>) -> anyhow::Result<Self> {
         let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
         // The wrapped shell and the emulated grid share the transcript pane's
         // dimensions: full width, with rows reduced by the status rule and the
@@ -88,6 +91,7 @@ impl App {
         let grid = Grid::with_scrollback(grid_rows, cols, scrollback);
         Ok(Self {
             config,
+            config_path,
             transcript,
             input: InputPad::new(),
             last_exit: None,
@@ -511,7 +515,7 @@ impl App {
     }
 
     fn on_key(&mut self, key: KeyEvent) {
-        use crate::action::{self, KeyChord};
+        use crate::action::{KeyChord, KeySpec};
         // `Esc Esc` is a contextual two-key gesture tracked by a keypress flag,
         // not a timer (FR-026/FR-029): any non-Esc key resets it.
         let was_esc_pending = self.esc_pending;
@@ -544,12 +548,13 @@ impl App {
             // current line; `Esc Esc` clears a multi-line buffer and the status
             // message (FR-026).
             (KeyCode::Esc, _) => self.on_esc(was_esc_pending),
-            // Shift+Enter / Alt+Enter insert a newline without submitting
-            // (FR-010, FR-011). Shift requires the Kitty protocol; Alt is the
-            // universal fallback (research R5).
-            (KeyCode::Enter, m) if m.contains(KeyModifiers::SHIFT) => self.input.insert_newline(),
-            (KeyCode::Enter, m) if m.contains(KeyModifiers::ALT) => self.input.insert_newline(),
-            (KeyCode::Enter, _) => self.submit(),
+            // Plain Enter submits the line; Shift+Enter / Alt+Enter fall through
+            // to the keymap and resolve to `InsertNewline` (FR-004/FR-018,
+            // research R5). Shift requires the Kitty protocol; Alt is the
+            // universal fallback.
+            (KeyCode::Enter, m) if !m.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) => {
+                self.submit()
+            }
             (KeyCode::Backspace, _) => self.input.backspace(),
             // Plain Left/Right move the cursor; Shift/Ctrl variants resolve to
             // named selection/word-motion actions below (FR-002/003/004).
@@ -568,11 +573,19 @@ impl App {
                     self.input.set_contents(text);
                 }
             }
-            // Everything else flows through the named-action registry (FR-008):
+            // Everything else flows through the configurable keymap (FR-001):
             // Home/End line motion, Ctrl+arrow word motion, Shift selections,
-            // Ctrl+U/K/W kills, and the page/line scroll bindings.
+            // Ctrl+U/K/W kills, the page/line scroll bindings, newline insertion,
+            // and the keyboard copy variants. Only the default mode is populated
+            // this sprint (a real mode selector lands in a later sprint).
             (code, mods) => {
-                if let Some(action) = action::resolve(KeyChord::new(code, mods)) {
+                let chord = KeyChord::new(code, mods);
+                if let Some(action) = self
+                    .config
+                    .keymaps
+                    .default()
+                    .resolve(KeySpec::Single(chord))
+                {
                     self.dispatch_action(action);
                 } else if let KeyCode::Char(c) = code {
                     if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) {
@@ -615,6 +628,8 @@ impl App {
             Action::KillToLineStart => self.input.kill_to_line_start(),
             Action::KillToLineEnd => self.input.kill_to_line_end(),
             Action::DeleteWordBefore => self.input.delete_word_before(),
+            // Insert a newline into the input buffer without submitting (FR-004).
+            Action::InsertNewline => self.input.insert_newline(),
             // Scrollback bindings (FR-013/015/016): page scroll preserves
             // `context_lines` of overlap, line scroll moves one line, and the
             // top/bottom jumps are reachable via Shift+Home/End.
@@ -628,6 +643,34 @@ impl App {
             Action::ScrollLineDown => self.transcript.scroll_line_down(),
             Action::ScrollToTop => self.transcript.scroll_to_top(),
             Action::ScrollToBottom => self.transcript.scroll_to_bottom(),
+            // Keyboard copy variants (FR-005): with no mouse position, both act
+            // on the bottom-most transcript output (research R4) — the newest
+            // visible line, and the most recently completed block's output.
+            Action::CopyCurrentLine => {
+                let target = {
+                    let off = self.transcript.scroll_offset().min(self.grid.max_scroll());
+                    let cells = self.grid.viewport_cells(off);
+                    cells
+                        .iter()
+                        .rposition(|row| !row.concat().trim_end().is_empty())
+                };
+                match target {
+                    Some(idx) => self.copy_current_line(idx as u16),
+                    None => self.notice = Some("copy failed: no visible line".into()),
+                }
+            }
+            Action::CopyBlockWithoutCommand => {
+                let target = self
+                    .store
+                    .iter()
+                    .filter(|b| !b.row_range.is_empty())
+                    .last()
+                    .map(|b| b.row_range.end - 1);
+                match target {
+                    Some(row) => self.copy_block_without_command(row),
+                    None => self.notice = Some("copy failed: no block output".into()),
+                }
+            }
             Action::ClearStatusMessage
             | Action::MultilineMoveStartBuffer
             | Action::MultilineMoveEndBuffer => {}
@@ -713,18 +756,62 @@ impl App {
                     &format!("Status bar {state}.\n"),
                 );
             }
-            // `/keys` lists the active key bindings from the action registry
-            // (FR-030).
+            // `/keys` lists the live effective key bindings (FR-014). Only the
+            // default (`norm`) mode is populated this sprint.
             Dispatch::Command(SlashCommand::Keys) => {
                 let mut text = String::from("Active key bindings:\n\n");
-                for (name, keys) in crate::action::listing() {
+                for (name, keys) in self
+                    .config
+                    .keymaps
+                    .for_mode(crate::action::DEFAULT_MODE)
+                    .listing()
+                {
                     text.push_str(&format!("  {keys:<14}  {name}\n"));
                 }
                 self.synthetic_block(format!("{}keys", self.config.leader_char), &text);
             }
+            // `/reload-config` re-reads configuration on demand and swaps the
+            // effective config + keymaps only on success, never touching the
+            // in-progress input buffer (FR-015/FR-016/FR-017).
+            Dispatch::Command(SlashCommand::ReloadConfig) => self.reload_config(),
             Dispatch::Unknown(name) => {
                 let text = builtins::unknown_text(&name, self.config.leader_char);
                 self.synthetic_block(format!("{}{}", self.config.leader_char, name), &text);
+            }
+        }
+    }
+
+    /// Re-read configuration on demand for `/reload-config` (FR-015). On success,
+    /// swap the effective `config` (which carries the `keymaps`) so new bindings
+    /// take effect immediately; on a malformed config, report the error and keep
+    /// the previous configuration (FR-016). The in-progress input buffer and any
+    /// active selection are never touched (FR-017).
+    fn reload_config(&mut self) {
+        let command = format!("{}reload-config", self.config.leader_char);
+        let Some(path) = self.config_path.clone() else {
+            self.synthetic_block(
+                command,
+                "No configuration file to reload; running on defaults.\n",
+            );
+            return;
+        };
+        match Config::load(Some(&path)) {
+            Ok(mut new_config) => {
+                // The wrapped shell is already running and is not re-spawned by a
+                // reload, so keep the currently-effective shell rather than the
+                // file's (possibly changed) value.
+                new_config.shell = self.config.shell.clone();
+                self.config = new_config;
+                self.synthetic_block(
+                    command,
+                    &format!("Configuration reloaded from {}.\n", path.display()),
+                );
+            }
+            Err(e) => {
+                self.synthetic_block(
+                    command,
+                    &format!("Reload failed: {e}\nKeeping the previous configuration.\n"),
+                );
             }
         }
     }

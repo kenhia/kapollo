@@ -8,6 +8,7 @@ use std::str::FromStr;
 use ratatui::style::Color;
 use serde::Deserialize;
 
+use crate::action::{self, Action, Binding, KeySpec, Keymap, Keymaps};
 use crate::error::ConfigError;
 
 /// Hard maximum for the per-block byte cap (64 MiB). Larger values are clamped.
@@ -48,6 +49,7 @@ const TOP_LEVEL_KEYS: &[&str] = &[
     "scroll",
     "status",
     "divider",
+    "keymap",
 ];
 const CAPS_KEYS: &[&str] = &[
     "per_block_bytes",
@@ -85,6 +87,9 @@ pub struct Config {
     pub status: Status,
     /// Cosmetic dividing rule between the output and input pads (sprint 005).
     pub divider: Divider,
+    /// Effective key bindings, default map overlaid by the `[keymap]` config
+    /// (sprint 006).
+    pub keymaps: Keymaps,
 }
 
 /// Mouse capture / selection behavior (FR-013, FR-017).
@@ -155,6 +160,7 @@ impl Default for Config {
             scroll: Scroll::default(),
             status: Status::default(),
             divider: Divider::default(),
+            keymaps: Keymaps::new(Keymap::default_map(), std::collections::BTreeMap::new()),
         }
     }
 }
@@ -272,6 +278,7 @@ struct RawConfig {
     scroll: Option<RawScroll>,
     status: Option<RawStatus>,
     divider: Option<RawDivider>,
+    keymap: Option<toml::Table>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -421,7 +428,111 @@ impl RawConfig {
                     enabled: raw.enabled.unwrap_or(d.enabled),
                 }
             },
+            keymaps: build_keymaps(self.keymap),
         })
+    }
+}
+
+/// Build the effective [`Keymaps`] from the `[keymap]` table (sprint 006). With
+/// no table, the default map is returned unchanged (FR-002). Top-level
+/// string/array values bind a default-mode action; a `[keymap.norm]` subtable
+/// also targets the default mode. Any other mode subtable is an unknown mode and
+/// is warned + ignored (FR-013).
+fn build_keymaps(raw: Option<toml::Table>) -> Keymaps {
+    let Some(table) = raw else {
+        return Keymaps::new(Keymap::default_map(), std::collections::BTreeMap::new());
+    };
+    // Default-mode (`norm`) overrides, collected in document order so a same-key
+    // conflict resolves last-declared-wins (FR-010).
+    let mut default_overrides: Vec<(Action, Binding)> = Vec::new();
+    for (key, value) in &table {
+        match value {
+            toml::Value::String(_) | toml::Value::Array(_) => {
+                collect_override(key, value, &mut default_overrides);
+            }
+            toml::Value::Table(sub) => {
+                if key == action::DEFAULT_MODE {
+                    // The default mode's own subtable feeds the same map as the
+                    // top-level entries.
+                    for (action_name, v) in sub {
+                        collect_override(action_name, v, &mut default_overrides);
+                    }
+                } else if action::KNOWN_MODES.contains(&key.as_str()) {
+                    // A known non-default mode would build its own overlay here;
+                    // none exist this sprint.
+                } else {
+                    tracing::warn!(mode = %key, "unknown keymap mode section ignored");
+                }
+            }
+            other => {
+                tracing::warn!(action = %key, kind = other.type_str(), "ignoring [keymap] entry");
+            }
+        }
+    }
+    let default = Keymap::with_overrides(&Keymap::default_map(), &default_overrides);
+    Keymaps::new(default, std::collections::BTreeMap::new())
+}
+
+/// Resolve `key` to an action and, if known, parse `value` into a binding and
+/// push the override; an unknown action name is warned and ignored (FR-013).
+fn collect_override(key: &str, value: &toml::Value, out: &mut Vec<(Action, Binding)>) {
+    match Action::from_name(key) {
+        Some(action) => {
+            if let Some(binding) = parse_binding(key, value) {
+                out.push((action, binding));
+            }
+        }
+        None => {
+            tracing::warn!(action = %key, "unknown action in [keymap] ignored");
+        }
+    }
+}
+
+/// Parse a `RawBinding` TOML value into a [`Binding`]. An empty string / empty
+/// array clears the action (FR-011). A value with no parseable key is warned and
+/// skipped, returning `None` so the action keeps its default (FR-009).
+fn parse_binding(action: &str, value: &toml::Value) -> Option<Binding> {
+    match value {
+        toml::Value::String(s) => {
+            if s.trim().is_empty() {
+                return Some(Binding::cleared());
+            }
+            match KeySpec::parse(s) {
+                Ok(spec) => Some(Binding::single(spec)),
+                Err(e) => {
+                    tracing::warn!(action = %action, error = %e, "skipping unparseable key binding");
+                    None
+                }
+            }
+        }
+        toml::Value::Array(items) => {
+            if items.is_empty() {
+                return Some(Binding::cleared());
+            }
+            let mut specs: Vec<KeySpec> = Vec::new();
+            for item in items {
+                match item.as_str() {
+                    Some(s) if !s.trim().is_empty() => match KeySpec::parse(s) {
+                        Ok(spec) => specs.push(spec),
+                        Err(e) => {
+                            tracing::warn!(action = %action, error = %e, "skipping unparseable key binding")
+                        }
+                    },
+                    _ => {
+                        tracing::warn!(action = %action, "ignoring non-string key binding entry");
+                    }
+                }
+            }
+            if specs.is_empty() {
+                None
+            } else {
+                Some(Binding::from_specs(&specs))
+            }
+        }
+        other => {
+            tracing::warn!(action = %action, kind = other.type_str(), "ignoring [keymap] value");
+            None
+        }
     }
 }
 
