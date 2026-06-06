@@ -18,7 +18,7 @@ status bar with `/status` and `/keys` slash commands.
 Every behavior ships as a **named action** with a hardcoded default binding, so
 the sprint 006 keymap engine can bind default + alternate per action with no
 behavioral rewrite. The status bar uses a **fixed layout** (the template language
-is sprint 007), reserves a 4-char mode field for future modes (LAAT, sprint 008),
+is sprint 008), reserves a 4-char mode field for future modes (LAAT, sprint 007),
 and the single-selection-across-pads rule disambiguates `Ctrl+C` and `Esc`.
 
 This is an **additive, in-place change** (the 004 pattern): the stable layers —

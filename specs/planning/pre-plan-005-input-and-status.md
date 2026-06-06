@@ -68,7 +68,7 @@ status template language, or LAAT mode.
 
 - Single line under the input pad; **on by default**, configurable on/off.
 - Auto-hidden when the terminal has **< 10 rows**.
-- **Fixed format** this sprint (no template engine — that's sprint 007). Reserve
+- **Fixed format** this sprint (no template engine — that's sprint 008). Reserve
   a 4-char mixed-case **mode field** (e.g. `LaaT`) so future modes don't reflow
   the layout. In this sprint the only mode is the default shell mode.
 - Layout: `mode | cwd<greedypad>| message | exit` — a greedy pad sits between
@@ -102,9 +102,9 @@ status template language, or LAAT mode.
 ## Out of scope (explicitly deferred)
 
 - Configurable keymap engine → **pre-plan-006**.
-- Status template language → **pre-plan-007**.
-- LAAT mode + `Ctrl+Alt+Enter` push/pop input stack → **pre-plan-008**.
-- `/save` and `/filter` slash commands → **pre-plan-008** (grouped with LAAT by
+- Status template language → **pre-plan-008**.
+- LAAT mode + `Ctrl+Alt+Enter` push/pop input stack → **pre-plan-007**.
+- `/save` and `/filter` slash commands → **pre-plan-007** (grouped with LAAT by
   mental model, even though they touch different code).
 - Binding `copy_block_without_command` / `copy_current_line` to keys — no good
   default chosen; wait for keymap config (006).

@@ -1,4 +1,4 @@
-# Pre-plan 007 — Templated ("fancy") status bar
+# Pre-plan 008 — Templated ("fancy") status bar
 
 > Source: `.scratch/005-pre-planning.md`. Sprint 005 ships a fixed-format status
 > bar; this sprint makes its content user-templatable.
@@ -60,4 +60,4 @@ string, replacing the fixed format from sprint 005.
 ## Dependencies / sequencing
 
 - **Depends on 005** (status bar infrastructure, variable sources, mode field).
-- Independent of 006 and 008.
+- Independent of 006 and 007.

@@ -84,7 +84,7 @@ input pad in `ui/status.rs`) is replaced by the single fixed-layout bar **below*
 input pad: `mode | cwd<greedypad>| message | exit`. The cwd and exit code move into
 their named fields; the existing `App.notice` becomes the `message` field; the sealed-
 block duration is dropped from the chrome (it is not part of the spec's fixed layout and
-can return via the sprint-007 template language if wanted).
+can return via the sprint-008 template language if wanted).
 
 **Rationale**: Two stacked status surfaces showing overlapping data (cwd, exit, notice)
 would be redundant and waste a row. The spec's layout is authoritative and explicitly
@@ -101,7 +101,7 @@ stays in one module.
   two files for no benefit; grow the existing module instead.
 
 **Open follow-on**: the sealed-block duration `(1.2s)` indicator is intentionally
-dropped from chrome this sprint; if missed, it returns naturally in the 007 status
+dropped from chrome this sprint; if missed, it returns naturally in the 008 status
 template. Noted so the 004 behavior change is explicit, not accidental.
 
 ---

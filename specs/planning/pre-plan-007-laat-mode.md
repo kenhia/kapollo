@@ -1,4 +1,4 @@
-# Pre-plan 008 — LAAT mode, `/save` & `/filter`
+# Pre-plan 007 — LAAT mode, `/save` & `/filter`
 
 > Source: `.scratch/005-pre-planning.md`. A new modal input mode and the first
 > exercise of kapollo's "modes" concept, grouped with the `/save` and `/filter`

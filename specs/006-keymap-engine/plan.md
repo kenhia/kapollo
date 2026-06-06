@@ -76,7 +76,7 @@ per keystroke; building the effective keymap happens once at startup and on
 **Constraints**: Constitution VII (simplicity) is the governing gate — the engine
 must be the minimum that satisfies the spec, not a speculative framework. Per-mode
 support is built structurally (the default mode is the only populated map this
-sprint) only because the spec (FR-012) and sprint 008 require it. Constitution VI:
+sprint) only because the spec (FR-012) and sprint 007 require it. Constitution VI:
 a malformed `/reload-config` must never leave the session with a broken keymap
 (FR-016) and must not discard an in-progress input buffer (FR-017).
 
@@ -114,7 +114,7 @@ alongside single-key chords) are resolved in [research.md](research.md).
 
 **Gate result: PASS.** No unjustified violations; Complexity Tracking not required.
 The one forward-looking structure — per-mode keymap sections — is explicitly
-required by the spec (FR-012) for sprint 008 and is built as the minimum (default
+required by the spec (FR-012) for sprint 007 and is built as the minimum (default
 mode is the only populated map this sprint).
 
 ## Project Structure

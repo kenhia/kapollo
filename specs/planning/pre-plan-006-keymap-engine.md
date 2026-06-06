@@ -45,7 +45,7 @@ config concern rather than a code change.
 ## Open questions
 
 - **Q1 — Config format/location.** TOML table shape, per-mode sections (does the
-  keymap vary by mode, anticipating LAAT in 008?), and how alternates are
+  keymap vary by mode, anticipating LAAT in 007?), and how alternates are
   expressed (array `["Shift+Enter", "Alt+Enter"]` vs. explicit `alt =`).
     - Keymap can vary by mode
     - array `["Shift+Enter", "Alt+Enter"]`
@@ -62,4 +62,4 @@ config concern rather than a code change.
 ## Dependencies / sequencing
 
 - **Depends on 005** (the named action set must exist).
-- **Enables 008** if LAAT wants per-mode bindings.
+- **Enables 007** if LAAT wants per-mode bindings.

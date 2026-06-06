@@ -15,7 +15,7 @@ insert_newline     = ["Shift+Enter", "Alt+Enter"] # array   -> primary + alterna
 kill_to_line_start = ""                            # empty   -> cleared / disabled
 copy_current_line  = "Ctrl+Y"
 
-# Per-mode override (anticipating LAAT, sprint 008). Overrides only the actions
+# Per-mode override (anticipating LAAT, sprint 007). Overrides only the actions
 # it lists; inherits the rest from the default mode.
 [keymap.laat]
 scroll_line_up   = "Ctrl+P"

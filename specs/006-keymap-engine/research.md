@@ -176,7 +176,7 @@ word_move_left  = "Ctrl+Left"               # primary only
 insert_newline  = ["Shift+Enter", "Alt+Enter"]  # primary + alternate
 kill_to_line_start = ""                       # cleared / disabled
 
-[keymap.laat]                                  # per-mode override (sprint 008)
+[keymap.laat]                                  # per-mode override (sprint 007)
 scroll_line_up = "Ctrl+P"
 ```
 

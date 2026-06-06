@@ -19,8 +19,8 @@ larger systems it sets up. Keys ship **hardcoded** this sprint, but every
 behavior is expressed as a **named action** so the keymap engine (sprint 006)
 can later bind a default and an alternate per action with no behavioral rewrite.
 The status bar uses a **fixed layout** (no template language — that is sprint
-007). LAAT mode, the push/pop input stack, and `/save`/`/filter` keybindings
-(sprint 008) are explicitly out of scope.
+008). LAAT mode, the push/pop input stack, and `/save`/`/filter` keybindings
+(sprint 007) are explicitly out of scope.
 
 This realizes the resolved decisions recorded in
 [pre-plan-005-input-and-status.md](../planning/pre-plan-005-input-and-status.md):
@@ -440,7 +440,7 @@ copy; with no selection press `Ctrl+C` and confirm an interrupt.
   is nonetheless expressed as a **named action** with a default binding so 006 can
   bind default + alternate per action without behavioral changes.
 - **Fixed status layout**: the status bar uses a fixed format with no template
-  language (that is sprint 007). The reserved 4-char mode field anticipates future
+  language (that is sprint 008). The reserved 4-char mode field anticipates future
   modes (e.g. LAAT) without reflowing the layout.
 - **Punctuation-aware motion vs. whitespace-rule kill**: `Ctrl+Left/Right` word
   motion treats punctuation as boundaries; `Ctrl+W` uses the readline whitespace
@@ -466,12 +466,12 @@ These are explicitly deferred and named so the boundary is unambiguous:
 
 - **Configurable keymap engine** — binding default + alternate per action via
   config → **sprint 006**. This sprint only names the actions and hardcodes them.
-- **Status template language** — a user-authored status format → **sprint 007**.
+- **Status template language** — a user-authored status format → **sprint 008**.
   This sprint ships a single fixed layout.
-- **LAAT mode and the `Ctrl+Alt+Enter` push/pop input stack** → **sprint 008**.
+- **LAAT mode and the `Ctrl+Alt+Enter` push/pop input stack** → **sprint 007**.
   The 4-char mode field is reserved but only the default shell mode exists here.
 - **`/save` and `/filter` slash commands** (and their keybindings) → **sprint
-  008**.
+  007**.
 - **Binding `copy_block_without_command` and `copy_current_line` to keys** — no
   good default chosen; waits for the keymap config (006). The block-aware copy
   affordances from 004 remain available via their existing (non-key) paths.
@@ -491,5 +491,5 @@ These are explicitly deferred and named so the boundary is unambiguous:
   (single selection, `Esc`/`Esc Esc` semantics, fixed status layout, status-message
   lifetime, hardcoded-but-named actions).
 - Sets up **sprint 006** (keymap engine binds these named actions) and **sprint
-  008** (LAAT builds on the multi-line input buffer landed here); no dependency on
-  sprint 007.
+  007** (LAAT builds on the multi-line input buffer landed here); no dependency on
+  sprint 008.

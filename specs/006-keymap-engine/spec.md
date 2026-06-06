@@ -16,7 +16,7 @@ out-of-the-box behavior **identical** to today.
 The engine introduces a human-writable key-string grammar (`Ctrl+Left`,
 `Shift+PageUp`, `Alt+Enter`, the `Esc Esc` chord), a `[keymap]` config surface
 that supports a **primary and an alternate** binding per action, per-mode keymap
-sections (anticipating LAAT in sprint 008), conflict detection with a
+sections (anticipating LAAT in sprint 007), conflict detection with a
 **warn + last-wins** policy, and **disable-by-clearing** so opinionated defaults
 like `Ctrl+U`/`Ctrl+K`/`Ctrl+W` can be turned off. The previously-unbound copy
 variants from sprint 004 (`copy_block_without_command`, `copy_current_line`) gain
@@ -144,12 +144,12 @@ names both actions and the last-declared one wins.
 
 ### User Story 4 - Per-mode keymaps and live `/keys` and `/reload-config` (Priority: P3)
 
-A user organizes bindings by mode (anticipating LAAT in sprint 008), inspects the
+A user organizes bindings by mode (anticipating LAAT in sprint 007), inspects the
 **effective** map at any time with `/keys`, and re-applies an edited config
 without restarting via `/reload-config`.
 
 **Why this priority**: Per-mode sections and on-demand reload are the
-forward-looking conveniences that make the engine pleasant and set up sprint 008,
+forward-looking conveniences that make the engine pleasant and set up sprint 007,
 but they are not required for the core rebinding value, so they come last.
 
 **Independent Test**: Define a mode-specific keymap section and confirm its
@@ -308,8 +308,8 @@ take effect without restarting.
 - The named-action registry from sprint 005 is the authoritative action set;
   this sprint extends its binding mechanism but does not add new editing
   behaviors.
-- Modes are anticipated (LAAT, sprint 008) but only the default mode exists in
-  practice this sprint; per-mode support is built and tested structurally so 008
+- Modes are anticipated (LAAT, sprint 007) but only the default mode exists in
+  practice this sprint; per-mode support is built and tested structurally so 007
   can use it, with the default mode as the only populated map.
 - Mouse-binding configuration is out of scope; only key bindings are configurable.
 - The config file format remains the existing TOML surface; the keymap is a new
