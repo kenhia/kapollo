@@ -4,9 +4,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> ⚠️ **Not ready for prime time (yet!)** — kapollo is at MVP level.
-> Linux only; wraps fish and bash, with a fallback for other shells. See
-> [docs/specification.md](docs/specification.md) for the full scope.
+> 🚧 **Almost ready for prime time** — kapollo is at MVP level. The main gaps
+> keeping it from daily use are completions support and saved (persistent)
+> input history. Linux only; wraps fish and bash, with a fallback for other
+> shells. See [docs/specification.md](docs/specification.md) for the full scope.
 
 kapollo (`kap`) wraps your real shell (fish or bash) in a PTY and presents a
 two-pane UI: an **input pad** at the bottom where you compose commands, and a
@@ -20,10 +21,9 @@ scrollable record of what you ran and what came back.
 
 ## Screenshot
 
-<!-- TODO: capture a screenshot or asciinema cast of kapollo running and embed
-     it here (e.g. ![kapollo](docs/screenshot.png)). -->
+![kapollo running in Windows Terminal](docs/screenshot.png)
 
-_A screenshot/cast will be added here._
+_kapollo running in Windows Terminal, fish shell, "Line at a Time" mode._
 
 ## Features
 
