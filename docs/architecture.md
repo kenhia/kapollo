@@ -498,3 +498,56 @@ re-reads the config file on demand, swapping the effective config + keymap only
 on success and reporting (but keeping the previous map on) a malformed file —
 never disturbing the in-progress input buffer (FR-015…FR-017). The resolved
 config path is retained on `App` so reload can re-read it.
+
+## 15. Input Modes & LAAT (sprint 007, `007-laat-mode`)
+
+Adds modal input editing on top of the single-line pad (FR-001…FR-031). The
+state lives in `src/input/mod.rs` (pure pieces) and is wired in `src/app.rs`.
+
+### 15.1 `InputMode` & mode-aware navigation
+- **`InputMode`** — `Norm` / `Mult` / `Laat`, surfaced on the status bar as
+  `norm` / `Mult` / `1T` (`InputMode::label()`). `Norm` recalls history on
+  `Up`/`Down`; `Mult`/`Laat` move the caret between buffer lines.
+- Transitions: typing a second line (`InsertNewline`) auto-enters `Mult`;
+  `Ctrl+1` (`toggle_mult_laat`) toggles `Norm→Mult` and `Mult↔Laat` (LAAT
+  needs a multi-line buffer); deleting a `Mult` buffer back to one line returns
+  to `Norm`; `Esc Esc`, submit, or a push returns to `Norm` (leaving `Laat` also
+  clears its buffer). `App::reconcile_mode_after_edit()` enforces the line-count
+  rules after each edit.
+- **Chat-style edge recall** — `InputHistory` gains a stashed-draft slot. On the
+  first line, `Up` stashes the live draft and recalls older entries; `Down` past
+  the newest entry restores the stash byte-for-byte (`edge_recall_older` /
+  `edge_recall_newer`). The stash is part of the push/pop snapshot (FR-011).
+
+### 15.2 `LaatState` & exit-code gating
+- **`LaatState { highlight, failed_lines, pending }`** tracks the highlighted
+  line, probable-failure flags, and the line awaiting completion. In `Laat`,
+  `Enter` submits **only** the highlighted line and arms `pending`; a multi-line
+  selection overrides the highlight and submits as one combined unit (FR-017).
+- The gating hook reuses the existing `Boundary::CommandEnd { exit_code }`
+  observation in `drain_shell` (the same path that sets `last_exit`, research
+  R5): `LaatState::apply_exit_code` advances the highlight (and the caret) on a
+  zero/absent exit and flags the line on a non-zero exit. The renderer
+  (`ui/input_pad.rs`) paints the highlighted line and any flagged lines with a
+  line-level background, honoring `color_enabled()`.
+
+### 15.3 Push/pop snapshot
+- **`InputSnapshot { buffer, cursor, mode, stash, laat }`** is a one-item stack
+  (`Option<InputSnapshot>` on `App`). `PushInput` (`Ctrl+Alt+Enter`) captures
+  the composing input and resets the pad to an empty `Norm`; a push while the
+  slot is occupied is a no-op (FR-020). The next `submit` — shell or slash alike
+  — restores the snapshot and clears the slot (FR-019).
+
+### 15.4 Slash commands `/save`, `/filter`, `/load`
+- `SlashCommand` gains argument-bearing `Save(String)`, `Filter(String)`, and
+  `Load(String)` variants (dispatch splits the verb from the trimmed remainder;
+  argument-less verbs still require an exact match).
+- `/save` writes the most recent sealed, non-synthetic block's exact stored
+  output to a cwd-relative (`~`-expanded) path; an existing file defers to a
+  `PendingPrompt { path, bytes }` that `App::on_key` resolves first
+  (`O`/`A`/`C`). `/filter` materializes the previous output to a temp file and
+  runs `cat <temp> | <cmd>` via the shell as a normal block titled
+  `{leader}filter <cmd>`, so it chains as the new previous output. `/load` reads
+  a file's lines into the buffer and enters `Laat` with line 0 highlighted.
+  Filesystem operations are system-boundary ops: errors surface as status
+  messages, never panics (Constitution VII).

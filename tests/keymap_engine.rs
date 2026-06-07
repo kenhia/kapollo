@@ -98,6 +98,38 @@ fn insert_newline_has_primary_and_alternate_by_default() {
 }
 
 #[test]
+fn toggle_mult_laat_is_bound_to_ctrl_1_by_default() {
+    // Sprint 007: the Ctrl+1 mode toggle is a named default binding, and the
+    // 006 parser reaches the same chord from its key string (K1/K2/K3).
+    // (Ctrl+Alt+1 collides with Windows Terminal's "Switch to Tab 1".)
+    let map = Keymap::default_map();
+    let chord = key(KeyCode::Char('1'), KeyModifiers::CONTROL);
+    assert_eq!(map.resolve(chord), Some(Action::ToggleMultLaat));
+    assert_eq!(
+        Action::from_name("toggle_mult_laat"),
+        Some(Action::ToggleMultLaat)
+    );
+    assert_eq!(
+        map.resolve(KeySpec::parse("Ctrl+1").unwrap()),
+        Some(Action::ToggleMultLaat)
+    );
+}
+
+#[test]
+fn push_input_is_bound_to_ctrl_alt_enter_by_default() {
+    // Sprint 007 US4: Ctrl+Alt+Enter pushes the input buffer; the action is a
+    // named default and the parser reaches the same chord from its key string.
+    let map = Keymap::default_map();
+    let chord = key(KeyCode::Enter, KeyModifiers::CONTROL | KeyModifiers::ALT);
+    assert_eq!(map.resolve(chord), Some(Action::PushInput));
+    assert_eq!(Action::from_name("push_input"), Some(Action::PushInput));
+    assert_eq!(
+        map.resolve(KeySpec::parse("Ctrl+Alt+Enter").unwrap()),
+        Some(Action::PushInput)
+    );
+}
+
+#[test]
 fn override_rebinds_and_old_key_stops_resolving() {
     let rebind = KeySpec::parse("Ctrl+B").unwrap();
     let map = Keymap::with_overrides(

@@ -51,6 +51,13 @@ _A screenshot/cast will be added here._
   config table (primary + optional alternate, disable-by-clearing), reload it
   live with `/reload-config`, and inspect the effective bindings with `/keys`.
   See [docs/keymap-defaults.toml](docs/keymap-defaults.toml) for every default.
+- **Input modes** — a `norm`/`Mult`/`1T` mode field on the status bar. `norm`
+  recalls history on Up/Down; `Mult` (auto-entered on a second line, or
+  `Ctrl+1`) moves the caret between lines with chat-style edge recall; `1T`
+  ("LAAT", `Ctrl+1` again on a multi-line buffer) steps line-by-line,
+  advancing on success and flagging a probable failure on a non-zero exit.
+  `Ctrl+Alt+Enter` pushes the buffer aside to run an ad-hoc command, restored on
+  the next submit.
 - **Input history** — kapollo's own Up/Down history, separate from the shell's.
 - **Full-screen passthrough** — `vim`, `less`, `top` run natively with stdin
   forwarded verbatim; the split-pad UI is restored cleanly on exit.
@@ -58,7 +65,8 @@ _A screenshot/cast will be added here._
   command, a divider rule above the input, and a fixed status bar showing a mode
   field, the cwd (following `cd`), transient messages, and the last exit code.
 - **Slash commands** — `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
-  `/quit` (and `/exit`), with a `//` escape for a literal leader.
+  `/save`, `/filter`, `/load`, `/quit` (and `/exit`), with a `//` escape for a
+  literal leader.
 - **Safe by default** — Ctrl-C interrupts the running command (not kapollo); the
   terminal is always restored on exit, error, and panic.
 
@@ -99,7 +107,9 @@ Run `/keys` for the full, live list.
 |-----|--------|
 | Enter | Submit the input |
 | Shift+Enter / Alt+Enter | Insert a newline (multiline compose) |
-| Up / Down | Recall input history |
+| Ctrl+1 | Toggle `Mult` editing, and `Mult` ↔ `1T` (LAAT) on a multi-line buffer |
+| Ctrl+Alt+Enter | Push the input buffer aside for an ad-hoc command (restored on the next submit) |
+| Up / Down | Recall input history (`norm`); move the caret between lines with edge recall (`Mult`/`1T`) |
 | Left / Right | Move the cursor one character |
 | Ctrl+Left / Ctrl+Right | Move one word |
 | Home / End | Start / end of the current line |
@@ -124,7 +134,7 @@ config table; `/reload-config` re-reads the config without restarting and
 list of every action and [docs/usage.md](docs/usage.md) for the syntax.
 
 Slash commands: `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
-`/quit` (alias `/exit`).
+`/save`, `/filter`, `/load`, `/quit` (alias `/exit`).
 See [docs/usage.md](docs/usage.md) for the configuration schema and full details.
 
 ## Documentation

@@ -16,7 +16,7 @@ use ratatui::Terminal;
 use crate::config::Config;
 use crate::grid::Grid;
 use crate::input::router::{self, MouseRoute, Routed};
-use crate::input::{InputHistory, InputPad};
+use crate::input::{InputHistory, InputMode, InputPad, LaatState};
 use crate::output::{Boundary, OutputProcessor};
 use crate::pty::{PtyEvent, PtySession};
 use crate::selection::coords::{self, Cell};
@@ -41,6 +41,13 @@ pub struct App {
     pub transcript: Transcript,
     pub input: InputPad,
     pub last_exit: Option<i32>,
+    /// The current input editing mode, surfaced in the status bar's mode field
+    /// (sprint 007). `Norm` recalls history on `Up`/`Down`; `Mult`/`Laat` move
+    /// the caret with chat-style edge recall.
+    pub mode: InputMode,
+    /// LAAT stepping state, present only while `mode == Laat` (sprint 007): the
+    /// highlight, probable-failure flags, and the line awaiting completion.
+    pub laat: Option<LaatState>,
     /// Current working directory shown on the status rule, updated from OSC 7
     /// (FR-019); initialized from the process's startup directory.
     pub cwd: std::path::PathBuf,
@@ -69,7 +76,24 @@ pub struct App {
     /// Whether a full-screen program currently owns the screen; while set, keys
     /// are encoded and forwarded to the child instead of editing the input pad.
     passthrough: bool,
+    /// A pending `/save` overwrite prompt (sprint 007, FR-023): while set,
+    /// `on_key` consumes the next key to resolve overwrite/append/cancel.
+    pending_prompt: Option<PendingPrompt>,
+    /// True while a `/filter` shell round-trip is in flight, so its completion
+    /// can surface a `filter non-zero exit` status message (sprint 007, FR-027).
+    filter_active: bool,
+    /// The one-item input push/pop stack (sprint 007, FR-018…FR-020): a pushed
+    /// snapshot is restored on the next submit. `None` means the slot is empty.
+    pushed: Option<crate::input::InputSnapshot>,
     should_quit: bool,
+}
+
+/// A deferred `/save` to an existing file, awaiting the user's
+/// overwrite/append/cancel choice (sprint 007, FR-023). Holds the resolved
+/// target path and the exact bytes to write.
+struct PendingPrompt {
+    path: std::path::PathBuf,
+    bytes: Vec<u8>,
 }
 
 impl App {
@@ -95,6 +119,8 @@ impl App {
             transcript,
             input: InputPad::new(),
             last_exit: None,
+            mode: InputMode::Norm,
+            laat: None,
             cwd: std::env::current_dir().unwrap_or_default(),
             history: InputHistory::new(),
             shell,
@@ -107,6 +133,9 @@ impl App {
             store,
             current_store_block: None,
             passthrough: false,
+            pending_prompt: None,
+            filter_active: false,
+            pushed: None,
             should_quit: false,
         })
     }
@@ -194,6 +223,17 @@ impl App {
                             Boundary::CommandEnd { exit_code } => {
                                 self.last_exit = exit_code;
                                 command_ended = Some(exit_code);
+                                // LAAT stepping: gate the highlight on the exit
+                                // code of the line just submitted (FR-004).
+                                self.apply_laat_gating(exit_code);
+                                // A completed `/filter` round-trip surfaces a
+                                // non-zero exit as a status message (FR-027).
+                                if self.filter_active {
+                                    self.filter_active = false;
+                                    if exit_code.is_some_and(|c| c != 0) {
+                                        self.notice = Some("filter non-zero exit".into());
+                                    }
+                                }
                             }
                             // The shell reported a new working directory via
                             // OSC 7; follow it on the status rule (FR-019).
@@ -516,6 +556,12 @@ impl App {
 
     fn on_key(&mut self, key: KeyEvent) {
         use crate::action::{KeyChord, KeySpec};
+        // A pending `/save` overwrite prompt consumes the next key first
+        // (FR-023): O/A/C(/Esc) resolve it; any other key keeps it up.
+        if self.pending_prompt.is_some() {
+            self.resolve_save_prompt(key.code);
+            return;
+        }
         // `Esc Esc` is a contextual two-key gesture tracked by a keypress flag,
         // not a timer (FR-026/FR-029): any non-Esc key resets it.
         let was_esc_pending = self.esc_pending;
@@ -555,24 +601,18 @@ impl App {
             (KeyCode::Enter, m) if !m.intersects(KeyModifiers::SHIFT | KeyModifiers::ALT) => {
                 self.submit()
             }
-            (KeyCode::Backspace, _) => self.input.backspace(),
+            (KeyCode::Backspace, _) => {
+                self.input.backspace();
+                self.reconcile_mode_after_edit();
+            }
             // Plain Left/Right move the cursor; Shift/Ctrl variants resolve to
             // named selection/word-motion actions below (FR-002/003/004).
             (KeyCode::Left, KeyModifiers::NONE) => self.input.move_left(),
             (KeyCode::Right, KeyModifiers::NONE) => self.input.move_right(),
-            // Up/Down recall kapollo's own input history (FR-013).
-            (KeyCode::Up, _) => {
-                if let Some(text) = self.history.recall_older() {
-                    let text = text.to_string();
-                    self.input.set_contents(text);
-                }
-            }
-            (KeyCode::Down, _) => {
-                if let Some(text) = self.history.recall_newer() {
-                    let text = text.to_string();
-                    self.input.set_contents(text);
-                }
-            }
+            // Up/Down are mode-aware (sprint 007): Norm recalls history; Mult and
+            // Laat move the caret between lines (edge recall added in US2).
+            (KeyCode::Up, _) => self.on_up(),
+            (KeyCode::Down, _) => self.on_down(),
             // Everything else flows through the configurable keymap (FR-001):
             // Home/End line motion, Ctrl+arrow word motion, Shift selections,
             // Ctrl+U/K/W kills, the page/line scroll bindings, newline insertion,
@@ -625,11 +665,24 @@ impl App {
                 self.selection.cancel();
                 self.input.select_word_right();
             }
-            Action::KillToLineStart => self.input.kill_to_line_start(),
-            Action::KillToLineEnd => self.input.kill_to_line_end(),
-            Action::DeleteWordBefore => self.input.delete_word_before(),
+            Action::KillToLineStart => {
+                self.input.kill_to_line_start();
+                self.reconcile_mode_after_edit();
+            }
+            Action::KillToLineEnd => {
+                self.input.kill_to_line_end();
+                self.reconcile_mode_after_edit();
+            }
+            Action::DeleteWordBefore => {
+                self.input.delete_word_before();
+                self.reconcile_mode_after_edit();
+            }
             // Insert a newline into the input buffer without submitting (FR-004).
-            Action::InsertNewline => self.input.insert_newline(),
+            // Growing a `Norm` buffer to a second line auto-enters `Mult` (FR-008).
+            Action::InsertNewline => {
+                self.input.insert_newline();
+                self.reconcile_mode_after_edit();
+            }
             // Scrollback bindings (FR-013/015/016): page scroll preserves
             // `context_lines` of overlap, line scroll moves one line, and the
             // top/bottom jumps are reachable via Shift+Home/End.
@@ -674,6 +727,10 @@ impl App {
             Action::ClearStatusMessage
             | Action::MultilineMoveStartBuffer
             | Action::MultilineMoveEndBuffer => {}
+            // Toggle Mult/LAAT (sprint 007, FR-015/FR-016).
+            Action::ToggleMultLaat => self.toggle_mult_laat(),
+            // Push the input buffer for an ad-hoc command (sprint 007, FR-018).
+            Action::PushInput => self.push_input(),
         }
     }
 
@@ -697,7 +754,14 @@ impl App {
                 self.input.cancel_selection();
             }
             EscAction::ClearCurrentLine => self.input.clear_current_line(),
-            EscAction::ClearWholeBuffer => self.input.clear(),
+            EscAction::ClearWholeBuffer => {
+                self.input.clear();
+                // Leaving `Mult`/`Laat` via `Esc Esc` returns to `Norm` and, for
+                // `Laat`, discards the stepping state with the buffer (FR-007/FR-014).
+                if self.mode != InputMode::Norm {
+                    self.set_mode(InputMode::Norm);
+                }
+            }
             EscAction::None => {}
         }
         // Toggle the pending flag: this `Esc` arms the gesture; the next `Esc`
@@ -705,11 +769,196 @@ impl App {
         self.esc_pending = !was_pending;
     }
 
+    /// Mode-aware `Up` (sprint 007): in `Norm`, recall the previous history
+    /// entry; in `Mult`/`Laat`, move the caret up one line, or — when already on
+    /// the first line — perform chat-style edge recall (stash the draft + recall
+    /// the previous entry, FR-010; [contracts/input-modes.md] §2/§3).
+    fn on_up(&mut self) {
+        match self.mode {
+            InputMode::Norm => {
+                if let Some(text) = self.history.recall_older() {
+                    let text = text.to_string();
+                    self.input.set_contents(text);
+                }
+            }
+            InputMode::Mult | InputMode::Laat => {
+                if self.input.caret_on_first_line() {
+                    let draft = self.input.as_str().to_string();
+                    if let Some(text) = self.history.edge_recall_older(&draft) {
+                        let text = text.to_string();
+                        self.input.set_contents(text);
+                    }
+                } else {
+                    self.input.caret_line_up();
+                }
+                self.sync_laat_highlight();
+            }
+        }
+    }
+
+    /// Mode-aware `Down` (sprint 007): in `Norm`, recall the next history entry;
+    /// in `Mult`/`Laat`, move the caret down one line, or — when on the last line
+    /// while recalling — restore the stashed draft (FR-011;
+    /// [contracts/input-modes.md] §2/§3). `Down` never recalls older entries.
+    fn on_down(&mut self) {
+        match self.mode {
+            InputMode::Norm => {
+                if let Some(text) = self.history.recall_newer() {
+                    let text = text.to_string();
+                    self.input.set_contents(text);
+                }
+            }
+            InputMode::Mult | InputMode::Laat => {
+                if self.input.caret_on_last_line() {
+                    if let Some(text) = self.history.edge_recall_newer() {
+                        self.input.set_contents(text);
+                    }
+                } else {
+                    self.input.caret_line_down();
+                }
+                self.sync_laat_highlight();
+            }
+        }
+    }
+
+    /// In `Laat`, keep the highlight on the caret's line (FR-002/FR-006).
+    fn sync_laat_highlight(&mut self) {
+        let row = self.input.cursor_row_col().0;
+        if let Some(laat) = self.laat.as_mut() {
+            laat.highlight = row;
+        }
+    }
+
+    /// Apply LAAT exit-code gating when a submitted line completes (FR-004): on
+    /// success the highlight advances and the caret follows to the next line; a
+    /// non-zero exit flags the line and holds. A no-op when nothing is pending.
+    fn apply_laat_gating(&mut self, exit_code: Option<i32>) {
+        let outcome = self
+            .laat
+            .as_mut()
+            .and_then(|laat| laat.apply_exit_code(exit_code));
+        if matches!(outcome, Some(crate::input::LaatOutcome::Advance)) {
+            let row = self.laat.as_ref().map_or(0, |laat| laat.highlight);
+            self.input.set_caret_line_start(row);
+        }
+    }
+
+    /// Toggle the input mode via `Ctrl+1` (sprint 007, FR-015/FR-016):
+    /// `Norm → Mult` (even empty/single line), and `Mult ↔ Laat` only when the
+    /// buffer is multi-line.
+    fn toggle_mult_laat(&mut self) {
+        let multiline = self.input.line_count() > 1;
+        let new_mode = self.mode.toggled_mult_laat(multiline);
+        self.set_mode(new_mode);
+    }
+
+    /// Switch the input mode, managing LAAT stepping state: entering `Laat`
+    /// starts a fresh highlight on line 0; leaving `Laat` discards the stepping
+    /// state (the buffer itself is cleared only on `Esc Esc`/submit/push, FR-007).
+    fn set_mode(&mut self, new_mode: InputMode) {
+        match new_mode {
+            InputMode::Laat if self.mode != InputMode::Laat => {
+                self.laat = Some(LaatState::new());
+            }
+            InputMode::Laat => {}
+            _ => self.laat = None,
+        }
+        self.mode = new_mode;
+    }
+
+    /// Reconcile the mode with the buffer's line count after an edit (sprint
+    /// 007): a `Norm` buffer that grows past one line enters `Mult` (FR-008); a
+    /// `Mult` buffer deleted back to a single line returns to `Norm` (FR-012).
+    /// `Laat` is left untouched (it ends only via `Esc Esc`/submit/push).
+    fn reconcile_mode_after_edit(&mut self) {
+        let lines = self.input.line_count();
+        match self.mode {
+            InputMode::Norm if lines > 1 => self.set_mode(InputMode::Mult),
+            InputMode::Mult if lines <= 1 => self.set_mode(InputMode::Norm),
+            _ => {}
+        }
+    }
+
+    /// Push the composing input onto the one-item stack (sprint 007, FR-018):
+    /// snapshot the buffer, caret, mode, stash, and LAAT state, then reset the
+    /// pad to an empty `Norm` for an ad-hoc command. A push while the slot is
+    /// occupied is a no-op so the first saved state is never lost (FR-020).
+    fn push_input(&mut self) {
+        if self.pushed.is_some() {
+            return;
+        }
+        let snapshot = crate::input::InputSnapshot::capture(
+            &self.input,
+            self.mode,
+            self.history.stash().map(str::to_string),
+            self.laat.clone(),
+        );
+        self.pushed = Some(snapshot);
+        self.input.clear();
+        self.history.set_stash(None);
+        self.set_mode(InputMode::Norm);
+    }
+
+    /// Restore a pushed input snapshot after an ad-hoc submission (sprint 007,
+    /// FR-019): reinstate the buffer, caret, mode, stashed draft, and LAAT state,
+    /// then clear the slot. A no-op when nothing is pushed.
+    fn pop_input(&mut self) {
+        if let Some(snapshot) = self.pushed.take() {
+            let (mode, stash, laat) = snapshot.restore(&mut self.input);
+            self.history.set_stash(stash);
+            self.mode = mode;
+            self.laat = laat;
+        }
+    }
+
     fn submit(&mut self) {
+        self.submit_line();
+        // Any submitted line pops a pushed snapshot, restoring the composing
+        // input the user set aside (sprint 007, FR-019).
+        self.pop_input();
+    }
+
+    fn submit_line(&mut self) {
         // The status message persists until the next submission or `Esc Esc`,
         // never a timeout (FR-025/FR-026): a fresh submit clears it.
         self.notice = None;
+
+        // A multi-line selection submits as one combined submission in any mode,
+        // overriding LAAT line-stepping (FR-017; selection overrides the
+        // highlight). The buffer is left intact (the selection is the unit).
+        if let Some(text) = self.input.selected_text() {
+            if text.contains('\n') {
+                self.input.cancel_selection();
+                self.run_submission(text);
+                return;
+            }
+        }
+
+        // LAAT: submit only the highlighted line and arm `pending` for exit-code
+        // gating, keeping the buffer for further stepping (FR-003/FR-005).
+        if self.mode == InputMode::Laat {
+            let row = self.laat.as_ref().map_or(0, |l| l.highlight);
+            let line = self.input.line_text(row);
+            if let Some(laat) = self.laat.as_mut() {
+                laat.submit_line(row);
+            }
+            self.run_submission(line);
+            return;
+        }
+
+        // Norm / Mult: submit the whole buffer as one unit, clearing the pad.
         let line = self.input.take_submit();
+        self.run_submission(line);
+        // Submitting a `Mult` buffer returns to `Norm` (FR-014).
+        if self.mode == InputMode::Mult {
+            self.set_mode(InputMode::Norm);
+        }
+    }
+
+    /// Route and run one submitted line: record it in history, reset the
+    /// transcript scroll/selection, and dispatch it as a slash or shell command.
+    /// Shared by the `Norm`/`Mult` whole-buffer submit and the `Laat` line submit.
+    fn run_submission(&mut self, line: String) {
         self.history.push(line.clone());
         // A fresh submission scrolls the transcript back to the newest output
         // and clears any lingering selection (FR-008, FR-021).
@@ -774,10 +1023,161 @@ impl App {
             // effective config + keymaps only on success, never touching the
             // in-progress input buffer (FR-015/FR-016/FR-017).
             Dispatch::Command(SlashCommand::ReloadConfig) => self.reload_config(),
+            // `/save <path>` writes the previous block's exact output to a file,
+            // prompting before overwriting an existing file (sprint 007, FR-021).
+            Dispatch::Command(SlashCommand::Save(path)) => self.run_save(&path),
+            // `/filter <cmd>` pipes the previous block's output through `<cmd>`
+            // via the shell, chaining into a new block (sprint 007, FR-025).
+            Dispatch::Command(SlashCommand::Filter(cmd)) => self.run_filter(&cmd),
+            // `/load <path>` loads a file's lines into the buffer and enters
+            // `Laat` with the first line highlighted (sprint 007, FR-028).
+            Dispatch::Command(SlashCommand::Load(path)) => self.run_load(&path),
             Dispatch::Unknown(name) => {
                 let text = builtins::unknown_text(&name, self.config.leader_char);
                 self.synthetic_block(format!("{}{}", self.config.leader_char, name), &text);
             }
+        }
+    }
+
+    /// The most recent sealed, non-synthetic block's stored output — the
+    /// "previous buffer" that `/save` and `/filter` act on (sprint 007,
+    /// FR-021/FR-024/FR-025). `None` when no real command output is retained.
+    fn previous_block_text(&self) -> Option<String> {
+        self.store
+            .iter()
+            .filter(|b| matches!(b.state, crate::session::BlockState::Closed) && !b.synthetic)
+            .last()
+            .map(|b| b.output_lossy())
+    }
+
+    /// Resolve a slash-command path argument relative to `App.cwd`, expanding a
+    /// leading `~`/`~/` to the home directory (sprint 007, FR-021/FR-028).
+    fn resolve_path(&self, arg: &str) -> std::path::PathBuf {
+        use std::path::PathBuf;
+        let expanded: PathBuf = if arg == "~" {
+            std::env::var_os("HOME").map_or_else(|| PathBuf::from(arg), PathBuf::from)
+        } else if let Some(rest) = arg.strip_prefix("~/") {
+            match std::env::var_os("HOME") {
+                Some(home) => PathBuf::from(home).join(rest),
+                None => PathBuf::from(arg),
+            }
+        } else {
+            PathBuf::from(arg)
+        };
+        if expanded.is_absolute() {
+            expanded
+        } else {
+            self.cwd.join(expanded)
+        }
+    }
+
+    /// Handle `/save <path>` (FR-021…FR-024): an empty path leaves the buffer
+    /// intact and reports the requirement; a missing previous block reports the
+    /// failure; an existing target defers to an overwrite prompt; otherwise the
+    /// previous block's exact bytes are written.
+    fn run_save(&mut self, arg: &str) {
+        if arg.is_empty() {
+            self.notice = Some("'/save' requires path".into());
+            return;
+        }
+        let Some(text) = self.previous_block_text() else {
+            self.notice = Some("Save failed, previous buffer not found".into());
+            return;
+        };
+        let path = self.resolve_path(arg);
+        let bytes = text.into_bytes();
+        if path.exists() {
+            self.notice = Some("File exists, [O]verwrite, [A]ppend, [C]ancel?".into());
+            self.pending_prompt = Some(PendingPrompt { path, bytes });
+        } else {
+            self.write_save(&path, &bytes, false);
+        }
+    }
+
+    /// Resolve the pending `/save` overwrite prompt from the next key (FR-023):
+    /// `O` overwrites, `A` appends, `C`/`Esc` cancels; any other key keeps the
+    /// prompt up.
+    fn resolve_save_prompt(&mut self, code: KeyCode) {
+        let Some(prompt) = self.pending_prompt.take() else {
+            return;
+        };
+        match code {
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                self.write_save(&prompt.path, &prompt.bytes, false)
+            }
+            KeyCode::Char('a') | KeyCode::Char('A') => {
+                self.write_save(&prompt.path, &prompt.bytes, true)
+            }
+            KeyCode::Char('c') | KeyCode::Char('C') | KeyCode::Esc => {
+                self.notice = Some("save canceled".into());
+            }
+            // Any other key keeps the prompt up for a deliberate choice.
+            _ => self.pending_prompt = Some(prompt),
+        }
+    }
+
+    /// Write (or append) `bytes` to `path`, surfacing any filesystem error as a
+    /// status message rather than a panic (system boundary, Constitution VII).
+    fn write_save(&mut self, path: &std::path::Path, bytes: &[u8], append: bool) {
+        use std::io::Write;
+        let result = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(append)
+            .truncate(!append)
+            .open(path)
+            .and_then(|mut file| file.write_all(bytes));
+        self.notice = Some(match result {
+            Ok(()) if append => format!("appended to {}", path.display()),
+            Ok(()) => format!("saved to {}", path.display()),
+            Err(err) => format!("save failed: {err}"),
+        });
+    }
+
+    /// Handle `/filter <cmd>` (FR-025…FR-027): write the previous block's output
+    /// to a temp file and submit `cat <temp> | <cmd>` to the shell as a normal
+    /// block titled `{leader}filter <cmd>`, so it chains as the new previous
+    /// output. A non-zero exit is surfaced when the block completes.
+    fn run_filter(&mut self, cmd: &str) {
+        if cmd.is_empty() {
+            self.notice = Some("'/filter' requires a command".into());
+            return;
+        }
+        let Some(text) = self.previous_block_text() else {
+            self.notice = Some("previous buffer not found".into());
+            return;
+        };
+        let path = filter_temp_path();
+        if let Err(err) = std::fs::write(&path, text.as_bytes()) {
+            self.notice = Some(format!("filter failed: {err}"));
+            return;
+        }
+        let label = format!("{}filter {}", self.config.leader_char, cmd);
+        let command = format!("cat {} | {}", shell_single_quote(&path), cmd);
+        self.filter_active = true;
+        self.run_shell_labeled(label, command);
+    }
+
+    /// Handle `/load <path>` (FR-028): read the file's lines into the input
+    /// buffer and enter `Laat` with the first line highlighted. A missing or
+    /// unreadable file reports a status message and does not enter `Laat` with a
+    /// partial buffer.
+    fn run_load(&mut self, arg: &str) {
+        if arg.is_empty() {
+            self.notice = Some("'/load' requires path".into());
+            return;
+        }
+        let path = self.resolve_path(arg);
+        match std::fs::read_to_string(&path) {
+            Ok(contents) => {
+                // Drop a single trailing newline so the buffer has no empty
+                // final line to step onto.
+                let body = contents.strip_suffix('\n').unwrap_or(&contents);
+                self.input.set_contents(body.to_string());
+                self.input.set_caret_line_start(0);
+                self.set_mode(InputMode::Laat);
+            }
+            Err(err) => self.notice = Some(format!("load failed: {err}")),
         }
     }
 
@@ -823,14 +1223,20 @@ impl App {
             let _ = self.shell.write_input(b"\n");
             return;
         }
+        self.run_shell_labeled(line.clone(), line);
+    }
 
-        let id = self.transcript.begin_block(line.clone());
+    /// Run `command` in the shell while showing `label` as the block's title.
+    /// `/filter` uses this to run a composed `cat <temp> | <cmd>` pipeline while
+    /// the transcript shows the friendly `{leader}filter <cmd>` (sprint 007).
+    fn run_shell_labeled(&mut self, label: String, command: String) {
+        let id = self.transcript.begin_block(label.clone());
         self.current_block = Some(id);
         // Mirror the boundary in the canonical store (OSC 133 `B`); its row
         // range is anchored as output arrives (R3, R7).
-        self.current_store_block = Some(self.store.begin(line.clone(), Some(self.cwd.clone())));
+        self.current_store_block = Some(self.store.begin(label, Some(self.cwd.clone())));
         self.processor.begin_command();
-        let _ = self.shell.send_command(&line);
+        let _ = self.shell.send_command(&command);
     }
 
     /// Render a kapollo-generated block (e.g. `/help`, errors) by injecting it
@@ -869,6 +1275,25 @@ impl App {
             output,
         )
     }
+}
+
+/// A unique temp-file path under the system temp dir for a `/filter` payload
+/// (sprint 007). Combines the process id with a per-process counter so back-to-
+/// back filters never collide.
+fn filter_temp_path() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut path = std::env::temp_dir();
+    path.push(format!("kapollo-filter-{}-{}.txt", std::process::id(), n));
+    path
+}
+
+/// Single-quote a path for safe inclusion in a shell command line, escaping any
+/// embedded single quotes (sprint 007 `/filter`).
+fn shell_single_quote(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy();
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 /// Build the raw terminal bytes for a synthetic block (pure; see

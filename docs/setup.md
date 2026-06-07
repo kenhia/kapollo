@@ -66,6 +66,8 @@ adds `context_lines` (overlap kept when paging, default 3); `[status] enabled`
 draws the rule above the input pad. The `[keymap]` table (and per-mode
 `[keymap.<mode>]` subtables) rebind editing and scrolling actions — see
 [keymap-defaults.toml](keymap-defaults.toml) for every action and its default,
-and reload edits live with `/reload-config`. A `prompt_char` must be a single
-character; an unknown `prompt_color` name logs a warning and falls back to the
-default.
+and reload edits live with `/reload-config`. The input-mode actions
+`toggle_mult_laat` (default `Ctrl+1`, toggles `Mult`/`1T`) and `push_input`
+(default `Ctrl+Alt+Enter`, push/pop the input buffer) are rebindable here like
+any other action. A `prompt_char` must be a single character; an unknown
+`prompt_color` name logs a warning and falls back to the default.

@@ -4,12 +4,13 @@
 //! provides the visual separation (FR-006).
 
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use crate::app::App;
+use crate::input::InputMode;
 
 /// Render the input pad into `area`.
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
@@ -46,6 +47,7 @@ fn input_lines(app: &App) -> Vec<Line<'static>> {
         let chars: Vec<char> = line.chars().collect();
         let n = chars.len();
         let line_start = global;
+        let line_index = lines.len();
 
         let rendered = match selection {
             Some((s, e)) => {
@@ -71,9 +73,33 @@ fn input_lines(app: &App) -> Vec<Line<'static>> {
             }
             None => Line::from(line.to_string()),
         };
+        // In LAAT, paint the highlighted line and any probable-failure line with
+        // a line-level background (sprint 007; FR-002/FR-004), honoring the color
+        // gate — without color the caret still conveys the highlight position.
+        let rendered = match laat_line_style(app, line_index) {
+            Some(style) => rendered.style(style),
+            None => rendered,
+        };
         lines.push(rendered);
 
         global += n + 1; // +1 accounts for the '\n' separator
     }
     lines
+}
+
+/// The line-level background style for LAAT line `idx`: a highlight background
+/// on the stepped line and a distinct probable-failure background on flagged
+/// lines. `None` outside LAAT, when color is disabled, or for ordinary lines.
+fn laat_line_style(app: &App, idx: usize) -> Option<Style> {
+    if app.mode != InputMode::Laat || !super::color_enabled() {
+        return None;
+    }
+    let laat = app.laat.as_ref()?;
+    if laat.is_failed(idx) {
+        Some(Style::default().bg(Color::Red).fg(Color::White))
+    } else if idx == laat.highlight {
+        Some(Style::default().bg(Color::Blue).fg(Color::White))
+    } else {
+        None
+    }
 }
