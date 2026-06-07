@@ -22,7 +22,9 @@ Run `/keys` at any time for the live, authoritative list of bindings.
 | **Enter** | Submit the input pad contents as one command |
 | **Shift+Enter** / **Alt+Enter** | Insert a newline without submitting (compose multiline input) |
 | **Backspace** | Delete the character before the cursor |
-| **Up** / **Down** | Recall previous / next entries from kapollo's input history |
+| **Ctrl+1** | Toggle `Mult` editing; on a multi-line buffer toggle `Mult` ↔ `1T` (LAAT) |
+| **Ctrl+Alt+Enter** | Push the input buffer aside for an ad-hoc command (restored on the next submit) |
+| **Up** / **Down** | In `norm`, recall previous / next history entries; in `Mult`/`1T`, move the caret between lines (with chat-style edge recall) |
 
 On submit, trailing blank (whitespace-only) lines of a multiline buffer are
 dropped so a stray empty last line does not run an extra command; interior blank
@@ -68,6 +70,44 @@ transcript: starting a selection in one clears the other.
 kapollo keeps its **own** input history, separate from your shell's native
 history.
 
+## Input modes
+
+The status bar's mode field shows the current input mode, which changes how
+`Up`/`Down` and `Enter` behave:
+
+| Mode | Label | How you get there | Behavior |
+|------|-------|-------------------|----------|
+| Normal | `norm` | The default | `Up`/`Down` recall history; `Enter` submits the line |
+| Multi-line | `Mult` | Type a second line (`Alt+Enter`), or press `Ctrl+1` | `Up`/`Down` move the caret between lines; `Enter` submits the whole buffer as one command |
+| LAAT (line-at-a-time) | `1T` | `Ctrl+1` again on a multi-line `Mult` buffer, or `/load <file>` | `Enter` submits **only the highlighted line** and the highlight steps through the buffer |
+
+Deleting a `Mult` buffer back to a single line returns to `norm`. Leaving a mode
+with `Esc Esc` (or a push) returns to `norm`; leaving `1T` also clears its buffer.
+
+### Chat-style edge recall (`Mult`/`1T`)
+
+With the caret on the **first** line, `Up` stashes your current draft and recalls
+the previous history entry; continued `Up` walks older entries. `Down` walks back
+toward the newest, and stepping **past** the newest entry restores your stashed
+draft exactly. `Down` never recalls older entries.
+
+### LAAT (`1T`): step a buffer line-by-line
+
+In `1T` the highlighted line is the next to run. Press `Enter` to submit it; on a
+zero exit the highlight **advances** to the next line, and on a non-zero exit the
+line is **flagged** as a probable failure and the highlight holds so you can fix
+and re-run. To recover from a flagged line you can re-run it (`Enter`), move past
+it (`Down` then `Enter`), or abort the whole buffer with `Esc Esc`. Use
+`/load <file>` to load a script's lines straight into `1T`.
+
+### Push / pop the input buffer
+
+`Ctrl+Alt+Enter` sets your current buffer aside (saving its text, caret, mode,
+stashed draft, and LAAT state) and gives you an empty `norm` pad for an ad-hoc
+command. The **next** submitted line — shell or slash command alike — restores
+the set-aside buffer exactly. It is a one-item stack: a second push while one is
+held is a no-op.
+
 ## Mouse, selection, and copy
 
 kapollo captures the mouse for selection over the transcript. The grid it
@@ -111,6 +151,9 @@ literal leading leader char to the shell.
 | `/status` | Toggle the fixed status bar on or off |
 | `/keys` | List the active key bindings (the live, effective keymap) |
 | `/reload-config` | Re-read the config file without restarting; applies keymap and other changes, keeping your in-progress input |
+| `/save <file>` | Write the previous command's exact output to a file (relative to the cwd, with `~` expansion); prompts `[O]verwrite, [A]ppend, [C]ancel` if the file exists |
+| `/filter <cmd>` | Pipe the previous command's output through `<cmd>` via the shell (pipes/aliases work); the result becomes the new previous output, so `/filter` chains |
+| `/load <file>` | Load a file's lines into the input buffer (one command per line) and enter `1T` with the first line highlighted |
 | `/quit` | Exit kapollo, restoring the terminal cleanly |
 | `/exit` | Alias for `/quit` |
 

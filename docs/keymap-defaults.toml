@@ -50,3 +50,9 @@ insert_newline = ["Shift+Enter", "Alt+Enter"]
 # Keyboard copy variants.
 copy_current_line = "Ctrl+Y"
 copy_block_without_command = "Alt+Y"
+
+# Input modes (sprint 007): toggle Mult / LAAT editing.
+toggle_mult_laat = "Ctrl+1"
+
+# Push/pop the input buffer to run an ad-hoc command (sprint 007).
+push_input = "Ctrl+Alt+Enter"

@@ -180,6 +180,38 @@ key input directly.
 - **FR-S17** Publish `docs/keymap-defaults.toml` listing every action's default,
   kept in sync with the code by an automated test.
 
+### Input modes, LAAT & filtering (sprint 007)
+- **FR-S18** Track an input **mode** (`Norm`/`Mult`/`Laat`) shown on the status
+  bar as `norm`/`Mult`/`1T`; `Norm` recalls history on Up/Down while `Mult`/`1T`
+  move the caret between buffer lines.
+- **FR-S19** Enter `Mult` automatically when the buffer gains a second line, and
+  return to `Norm` when it is edited back to one line; `Ctrl+1`
+  (`toggle_mult_laat`) toggles `Norm→Mult` and `Mult↔Laat` on a multi-line
+  buffer; `Esc Esc`, a submit, or a push returns to `Norm` (leaving `Laat` also
+  clears its buffer).
+- **FR-S20** In `Mult`/`1T`, give Up/Down chat-style **edge recall**: from the
+  first line, Up stashes the live draft and recalls older history; stepping Down
+  past the newest entry restores the stashed draft exactly. The stash travels
+  with the push/pop snapshot.
+- **FR-S21** In `1T` (LAAT), submit **only** the highlighted line on Enter and
+  gate on its exit code: advance the highlight on a zero/absent exit, or flag the
+  line as a probable failure (rendered with a line background) on a non-zero
+  exit, holding so it can be fixed and re-run; a multi-line selection overrides
+  the highlight and submits as one unit.
+- **FR-S22** Provide `push_input` (`Ctrl+Alt+Enter`) to set the composing buffer
+  aside (its text, caret, mode, stash, and LAAT state) into a one-item stack and
+  reset the pad to an empty `Norm`; a push while one is held is a no-op, and the
+  next submit restores it.
+- **FR-S23** Add `/save <file>` to write the most recent sealed block's exact
+  stored output to a cwd-relative (`~`-expanded) path, prompting
+  `[O]verwrite/[A]ppend/[C]ancel` when the file exists.
+- **FR-S24** Add `/filter <cmd>` to pipe the previous output through `<cmd>` via
+  the shell (a real block, so pipes/aliases work and it chains as the new
+  previous output).
+- **FR-S25** Add `/load <file>` to load a file's lines into the buffer and enter
+  `1T` with the first line highlighted. Filesystem errors for all three commands
+  surface as status messages, never panics.
+
 ## 3. Key Entities
 
 - **Block** — one command + retained output + exit code, plus its grid
@@ -198,6 +230,12 @@ key input directly.
 - **Keymap** — the data-driven `Action` → `Binding` (primary + optional
   alternate) table, with a zero-config default map, `[keymap]` overrides
   (clear/rebind, last-declared-wins), and per-mode (`norm`) sections.
+- **Input Mode** — the `Norm`/`Mult`/`Laat` state governing Up/Down and submit
+  semantics; surfaced on the status bar.
+- **LAAT State** — the line-at-a-time highlight, the set of probable-failure
+  lines, and the line pending a completion gate.
+- **Input Snapshot** — the one-item push/pop stack capturing the buffer, caret,
+  mode, stashed draft, and LAAT state.
 - **Shell Session** — the wrapped shell process in a PTY with the injected hook.
 
 ## 4. Success Criteria

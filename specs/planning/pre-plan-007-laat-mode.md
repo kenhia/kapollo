@@ -26,6 +26,8 @@ Mode naming: full name **`LaaT`** (4 chars, mixed case), short form **`1T`**
   through `<cmd>`. E.g. `ps -aux` then `/filter rg postgres` behaves like
   `ps -aux | rg postgres` (conceptually: save previous output to a temp,
   `cat <temp> | <cmd>`). Original deferral (kwi WI #44).
+- **`/load <file>`** — read a script file's lines into the LAAT buffer (one
+  command per line) and enter LAAT mode (see Q4).
 
 ### LAAT (Line-At-A-Time) mode
 
@@ -93,44 +95,105 @@ Mode naming: full name **`LaaT`** (4 chars, mixed case), short form **`1T`**
   failure. "Probable" is deliberate — some commands (e.g. Windows `robocopy`)
   use non-zero success codes.
 - **Mode label** is `LaaT` / `1T`.
+- **Keymap integration (006 shipped).** All new keys (the `Ctrl-Alt-1` mode
+  toggle, the `Ctrl+Alt+Enter` push/pop) and the new slash commands are
+  registered as **named actions** in the keymap engine — rebindable and listed by
+  `/keys`, with `Ctrl-Alt-1` etc. as the *defaults*. Per-mode config sections
+  (`[keymap.laat]`/`[keymap.mult]`) remain out of scope this sprint.
+- **Entering a mode from norm.** `Ctrl-Alt-1` in **norm** (even on a single or
+  empty line) enters **Mult**; once multi-line, `Ctrl-Alt-1` toggles
+  **Mult ↔ LAAT**. `Alt+Enter` (a 2nd line) and `/load <file>` are the other
+  entry paths (the latter lands directly in LAAT).
+- **`/filter` runs via the shell** so pipes/globs/aliases work; its result is a
+  new transcript block whose output **becomes the new “previous output,”** so
+  `/filter` chains.
+- **`/save` and `/load` resolve paths relative to kapollo’s current cwd**
+  (which follows `cd`), with `~` tilde expansion.
 
 ## Out of scope
 
-- Per-mode keymap configuration (depends on 006 if pursued).
+- Per-mode keymap **config sections** (`[keymap.laat]` / `[keymap.mult]`) — the
+  new bindings are named, rebindable actions (see the keymap-integration decision
+  below), but mode-scoped config tables wait for a later sprint.
 - Persisting/saving LAAT buffers between sessions.
 
 ## Open questions
 
 - **Q1 — Entry binding.** Which key (or `/`-command) toggles LAAT? Interaction
   with the keymap engine if 006 ships first.
+    - slash commands (currently) don't coexist with content in the input buffer,
+      I'm thinking for this sprint we add a keybinding (default: `Ctrl-Alt-1`)
+      to toggle LAAT <--> Mult
+    - **Resolved:** `Ctrl-Alt-1` in **norm** enters **Mult** (even single/empty
+      line); once multi-line it toggles **Mult ↔ LAAT**. `/load` also enters LAAT
+      directly. The toggle is a **named, rebindable action** (keymap engine, 006).
 - **Q2 — Failure recovery UX.** On a non-zero exit, what are the options — edit
   the line in place and re-run, skip, abort the whole buffer? Does the user
   override the "probably failed" and advance manually?
+    - User can:
+        - rerun with `Enter` (failure not related to command now fixed)
+        - determine command was okay (non-zero success code), `DownArrow` `Enter`
+        - abort with `Esc` `Esc`
+        - Push LAAT input buffer, fix issue, Pop input buffer, arrows to select, then continue
 - **Q3 — Multi-line submit.** When `Shift+arrow` selects several lines and the
   user hits `Enter`, are they sent as one combined submission or run
   sequentially with gating between each?
+    - I think we keep selection and submission separate (in all modes) currently
+      in a multiline (still currently norm mode, but mult soon) if I select
+      everything it submits; lets keep this behavior in norm/mult/laat
 - **Q4 — "Load a script" source.** File path via a command/arg? Relation to a
   future `/save`'d block? Define the load surface.
+    - yes, file path via command arg, e.g. `/load ~/my_install_script`
+    - **Resolved:** path resolves relative to kapollo's current cwd (follows
+      `cd`), with `~` tilde expansion; `/load` lands the file's lines in the LAAT
+      buffer (one command per line) and enters LAAT.
 - **Q5 — Output association.** How is each line's output/exit shown against the
   buffer (inline, in the transcript, both)?
+    - output just as if this was a single line, norm mode command submission
+    - exit code displayed in status for the command that was submitted (last
+      exit code is what we display now, same behavior)
 - **Q6 — `/save` target semantics.** Path resolution (relative to cwd?), default
   filename if omitted, overwrite vs. append/confirm, and behavior when the
   previous block is unavailable/evicted (explicit notice, per FR-025).
+    - `/save` without target gives a status bar message "'/save' requires path",
+      the input buffer is not cleared allowing user to either `Esc` or provide
+      path arg and resubmit
+    - prompt if exists, "File exists, [O]verwrite, [A]ppend, [C]ancel?"
+    - status message error "Save failed, previous buffer not found"
+    - **Resolved:** path resolves relative to kapollo's current cwd (follows
+      `cd`), with `~` tilde expansion.
 - **Q7 — `/filter` execution model.** Run `<cmd>` via the shell (so pipes/globs
   work) or exec directly? Does `/filter` create a new block in the transcript,
   and does its own output become the new "previous output" for a chained
   `/filter`? How are non-zero filter exits surfaced?
+    - new block in transcript, the command will be "/filter ...rest of command"
+    - on non-zero exit, we update the exit code in the status bar AND add status
+      message "filter non-zero exit" (often okay, if I `rg` and not found, I get
+      a non-zero)
+    - **Resolved:** runs via the **shell** (pipes/globs/aliases work); the result
+      block **becomes the new “previous output,”** so `/filter` chains.
 - **Q8 — `Mult` mode entry/exit.** Does `Alt+Enter` from a single line always
   enter `Mult`, or only when the buffer becomes multi-line? How does the user
   leave `Mult` — on submit (`Enter`), on `Esc Esc` clearing the buffer (005
   FR-029), or an explicit toggle? Does deleting back to one line auto-exit?
+    - `Alt+Enter` (adding a second line to input buffer) places us into `mult`
+      (user can optionally toggle into laat once in mult). If user removes
+      additional lines so buffer is back to one line, we transition back to
+      norm.
+    - User can leave mult by `Esc Esc`, command submit, or pushing existing
+      command
 - **Q9 — `Mult` vs. LAAT overlap.** Both are multi-line, arrow-navigated modes.
   Is `Mult` a distinct mode or just LAAT-without-gating? Clarify which keys
   differ (LAAT: highlight + step + exit-code gating; `Mult`: free caret editing,
   single combined submit).
+    - keys are the same for laat and mult, I think of LaaT as "Mult + highlight
+      + step + exit-code gating"
 - **Q10 — Stashed-draft scope.** Is the temporary stashed buffer kept only while
   recalling history (cleared on submit), and does it survive a mode switch
   (`Mult` ↔ normal, push/pop stack)?
+    - it survives until popped. Push a "mult", do several other commands, pop
+      gives us the buffer and the "mult" mode. If user then invoked "laat" and
+      pushed, when popped it would be the buffer and the "laat" mode.
 
 ## Dependencies / sequencing
 

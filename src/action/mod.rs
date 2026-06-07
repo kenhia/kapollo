@@ -51,6 +51,9 @@ pub enum Action {
     // sprint, so the keymap engine can bind them later.
     MultilineMoveStartBuffer,
     MultilineMoveEndBuffer,
+    // Input modes (sprint 007): toggle Mult/LAAT, and push/pop the input buffer.
+    ToggleMultLaat,
+    PushInput,
 }
 
 impl Action {
@@ -80,6 +83,8 @@ impl Action {
             Action::ClearStatusMessage => "clear_status_message",
             Action::MultilineMoveStartBuffer => "multiline_move_start_buffer",
             Action::MultilineMoveEndBuffer => "multiline_move_end_buffer",
+            Action::ToggleMultLaat => "toggle_mult_laat",
+            Action::PushInput => "push_input",
         }
     }
 
@@ -110,6 +115,8 @@ impl Action {
             Action::ClearStatusMessage,
             Action::MultilineMoveStartBuffer,
             Action::MultilineMoveEndBuffer,
+            Action::ToggleMultLaat,
+            Action::PushInput,
         ];
         ALL.iter().copied().find(|a| a.name() == name)
     }
@@ -489,6 +496,24 @@ impl Keymap {
             Binding::single(KeySpec::Single(KeyChord::new(
                 KeyCode::Char('y'),
                 KeyModifiers::ALT,
+            ))),
+        ));
+        // Input modes (007): toggle Mult/LAAT with Ctrl+1 (the 006 parser
+        // already accepts the chord — the digit falls through to Char('1')).
+        // Ctrl+Alt+1 collides with Windows Terminal's "Switch to Tab 1".
+        bindings.push((
+            Action::ToggleMultLaat,
+            Binding::single(KeySpec::Single(KeyChord::new(
+                KeyCode::Char('1'),
+                KeyModifiers::CONTROL,
+            ))),
+        ));
+        // Push/pop the input buffer with Ctrl+Alt+Enter (sprint 007, US4).
+        bindings.push((
+            Action::PushInput,
+            Binding::single(KeySpec::Single(KeyChord::new(
+                KeyCode::Enter,
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
             ))),
         ));
         let map = Keymap { bindings };

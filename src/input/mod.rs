@@ -7,7 +7,143 @@ mod editing;
 pub mod router;
 pub mod selection;
 
+use std::collections::BTreeSet;
+
 pub use selection::InputSelection;
+
+/// The editing mode of the input buffer, surfaced in the status bar's reserved
+/// 4-column mode field (sprint 007; see
+/// `specs/007-laat-mode/contracts/input-modes.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InputMode {
+    /// Single-line / default editing; `Up`/`Down` recall history.
+    #[default]
+    Norm,
+    /// Multi-line editing; `Up`/`Down` move the caret, with chat-style edge recall.
+    Mult,
+    /// `Mult` + highlight + step + exit-code gating (Line-At-A-Time).
+    Laat,
+}
+
+impl InputMode {
+    /// The 4-column status-bar label for this mode (`norm` / `Mult` / `1T`).
+    pub fn label(self) -> &'static str {
+        match self {
+            InputMode::Norm => "norm",
+            InputMode::Mult => "Mult",
+            InputMode::Laat => "1T",
+        }
+    }
+
+    /// The `ToggleMultLaat` transition (`Ctrl+1`) given whether the buffer is
+    /// multi-line: `Norm → Mult` (even empty/single line, FR-015); `Mult ↔ Laat`
+    /// only when multi-line (FR-016); a single-line `Mult` stays `Mult` (LAAT
+    /// needs multiple lines to step through).
+    pub fn toggled_mult_laat(self, multiline: bool) -> InputMode {
+        match self {
+            InputMode::Norm => InputMode::Mult,
+            InputMode::Mult if multiline => InputMode::Laat,
+            InputMode::Laat => InputMode::Mult,
+            other => other,
+        }
+    }
+}
+
+/// The advance/flag outcome of applying an exit code to a pending LAAT line
+/// (sprint 007; `specs/007-laat-mode/contracts/laat-engine.md` §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaatOutcome {
+    /// Exit `0` (or no reported code): advance the highlight, clear the flag.
+    Advance,
+    /// Non-zero exit: flag the line as a *probable* failure, keep the highlight.
+    Flag,
+}
+
+/// The LAAT stepping state — present only while `mode == Laat`. A highlight
+/// steps line-by-line; `Enter` submits the highlighted line and arms `pending`;
+/// the next `CommandEnd` exit code advances or flags it (sprint 007).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LaatState {
+    /// The currently highlighted buffer line (0-based).
+    pub highlight: usize,
+    /// Lines flagged as *probable* failures.
+    pub failed_lines: BTreeSet<usize>,
+    /// The line last submitted, awaiting a `CommandEnd` boundary.
+    pub pending: Option<usize>,
+}
+
+impl LaatState {
+    /// A fresh LAAT state: highlight on line 0, no flags, nothing pending.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record that `line` has been submitted and is awaiting completion.
+    pub fn submit_line(&mut self, line: usize) {
+        self.pending = Some(line);
+    }
+
+    /// Apply a `CommandEnd` exit code to the pending line (pure gating, FR-004).
+    /// Exit `0` — or a missing code (no failure reported) — advances the
+    /// highlight past the line and clears its flag; a non-zero exit flags the
+    /// line as a probable failure and keeps the highlight. Returns `None` when
+    /// nothing was pending.
+    pub fn apply_exit_code(&mut self, exit: Option<i32>) -> Option<LaatOutcome> {
+        let line = self.pending.take()?;
+        if matches!(exit, Some(0) | None) {
+            self.failed_lines.remove(&line);
+            self.highlight = line + 1;
+            Some(LaatOutcome::Advance)
+        } else {
+            self.failed_lines.insert(line);
+            self.highlight = line;
+            Some(LaatOutcome::Flag)
+        }
+    }
+
+    /// Whether `line` is flagged as a probable failure (for rendering).
+    pub fn is_failed(&self, line: usize) -> bool {
+        self.failed_lines.contains(&line)
+    }
+}
+
+/// A one-item snapshot of the composing input, saved by `PushInput` and
+/// restored on the next submit (sprint 007 push/pop, FR-018…FR-020). Captures
+/// everything needed to resume composition exactly: the buffer, caret, mode, the
+/// chat-style stashed draft (FR-011), and the LAAT stepping state when in `Laat`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputSnapshot {
+    pub buffer: String,
+    pub cursor: usize,
+    pub mode: InputMode,
+    pub stash: Option<String>,
+    pub laat: Option<LaatState>,
+}
+
+impl InputSnapshot {
+    /// Capture the composing input from its constituent pieces.
+    pub fn capture(
+        input: &InputPad,
+        mode: InputMode,
+        stash: Option<String>,
+        laat: Option<LaatState>,
+    ) -> Self {
+        Self {
+            buffer: input.as_str().to_string(),
+            cursor: input.cursor(),
+            mode,
+            stash,
+            laat,
+        }
+    }
+
+    /// Restore the snapshot's buffer and caret into `input`, returning the saved
+    /// `(mode, stash, laat)` for the caller to reinstate on its own state.
+    pub fn restore(self, input: &mut InputPad) -> (InputMode, Option<String>, Option<LaatState>) {
+        input.restore(self.buffer, self.cursor);
+        (self.mode, self.stash, self.laat)
+    }
+}
 
 /// The editable input buffer with a character cursor.
 #[derive(Debug, Default)]
@@ -67,6 +203,62 @@ impl InputPad {
         }
     }
 
+    /// Whether the caret sits on the first buffer line (sprint 007).
+    pub fn caret_on_first_line(&self) -> bool {
+        self.cursor_row_col().0 == 0
+    }
+
+    /// Whether the caret sits on the last buffer line (sprint 007).
+    pub fn caret_on_last_line(&self) -> bool {
+        self.cursor_row_col().0 + 1 >= self.line_count()
+    }
+
+    /// Move the caret up one buffer line, preserving the visual column where the
+    /// target line is long enough and clamping to its end otherwise. A no-op on
+    /// the first line. Collapses any selection (sprint 007;
+    /// `specs/007-laat-mode/contracts/input-modes.md` §2).
+    pub fn caret_line_up(&mut self) {
+        self.selection = None;
+        let (row, col) = self.cursor_row_col();
+        if row == 0 {
+            return;
+        }
+        self.cursor = self.offset_at_line_col(row - 1, col);
+    }
+
+    /// Move the caret down one buffer line, preserving the visual column (clamped
+    /// to the target line's end). A no-op on the last line. Collapses any
+    /// selection (sprint 007).
+    pub fn caret_line_down(&mut self) {
+        self.selection = None;
+        let (row, col) = self.cursor_row_col();
+        if row + 1 >= self.line_count() {
+            return;
+        }
+        self.cursor = self.offset_at_line_col(row + 1, col);
+    }
+
+    /// Move the caret to the start of buffer line `row`, clamping a row beyond
+    /// the end to the buffer's end (sprint 007 LAAT highlight follow).
+    pub fn set_caret_line_start(&mut self, row: usize) {
+        self.selection = None;
+        self.cursor = self.offset_at_line_col(row, 0);
+    }
+
+    /// Char offset of `(line, col)`, clamping `col` to that line's length and a
+    /// line beyond the end to the buffer's end.
+    fn offset_at_line_col(&self, line: usize, col: usize) -> usize {
+        let mut offset = 0;
+        for (i, l) in self.buffer.split('\n').enumerate() {
+            let llen = l.chars().count();
+            if i == line {
+                return offset + col.min(llen);
+            }
+            offset += llen + 1; // +1 for the '\n' separator
+        }
+        self.char_count()
+    }
+
     /// Clear the buffer and reset the cursor.
     pub fn clear(&mut self) {
         self.selection = None;
@@ -87,6 +279,20 @@ impl InputPad {
         &self.buffer
     }
 
+    /// The cursor position as a count of characters from the buffer start, for
+    /// snapshotting (sprint 007 push/pop).
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    /// Restore a snapshotted buffer and cursor, clamping the cursor to the
+    /// buffer length and clearing any selection (sprint 007 push/pop).
+    pub fn restore(&mut self, buffer: impl Into<String>, cursor: usize) {
+        self.selection = None;
+        self.buffer = buffer.into();
+        self.cursor = cursor.min(self.char_count());
+    }
+
     /// Whether the buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
@@ -95,6 +301,12 @@ impl InputPad {
     /// Number of visual lines in the buffer (at least one).
     pub fn line_count(&self) -> usize {
         self.buffer.split('\n').count()
+    }
+
+    /// The text of buffer line `row` (0-based), or an empty string when out of
+    /// range (sprint 007 LAAT line submission).
+    pub fn line_text(&self, row: usize) -> String {
+        self.buffer.split('\n').nth(row).unwrap_or("").to_string()
     }
 
     /// The cursor's `(row, column)` in characters, for rendering.
@@ -329,6 +541,10 @@ pub struct InputHistory {
     entries: Vec<String>,
     /// Current recall position; `None` means "not recalling" (at the live draft).
     cursor: Option<usize>,
+    /// The live draft stashed when chat-style edge recall begins, restored when
+    /// stepping newer past the newest entry (FR-010/FR-011). Part of the input
+    /// snapshot so it survives a push/pop round-trip (sprint 007).
+    stash: Option<String>,
 }
 
 impl InputHistory {
@@ -377,11 +593,91 @@ impl InputHistory {
             }
         }
     }
+
+    /// Chat-style edge recall: starting from the live draft, stash `draft` and
+    /// recall the previous (older) entry; continued calls walk older entries
+    /// without re-stashing (FR-010; [contracts/input-modes.md] §3). `None` when
+    /// the history is empty.
+    pub fn edge_recall_older(&mut self, draft: &str) -> Option<&str> {
+        if self.entries.is_empty() {
+            return None;
+        }
+        if self.cursor.is_none() {
+            self.stash = Some(draft.to_string());
+        }
+        self.recall_older()
+    }
+
+    /// Chat-style edge restore: walk newer entries; stepping past the newest
+    /// entry restores the stashed draft byte-for-byte and returns to the
+    /// live-draft state (FR-011; [contracts/input-modes.md] §3). `Down` never
+    /// recalls older entries. `None` when not currently recalling.
+    pub fn edge_recall_newer(&mut self) -> Option<String> {
+        match self.cursor {
+            None => None,
+            Some(i) if i + 1 < self.entries.len() => {
+                self.cursor = Some(i + 1);
+                self.entries.get(i + 1).map(String::from)
+            }
+            Some(_) => {
+                // Past the newest entry: restore the stashed draft.
+                self.cursor = None;
+                Some(self.stash.take().unwrap_or_default())
+            }
+        }
+    }
+
+    /// The stashed draft, if any — for inclusion in an input snapshot (sprint 007).
+    pub fn stash(&self) -> Option<&str> {
+        self.stash.as_deref()
+    }
+
+    /// Restore a stashed draft (e.g. when popping an input snapshot, sprint 007).
+    pub fn set_stash(&mut self, stash: Option<String>) {
+        self.stash = stash;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edge_recall_stashes_draft_and_restores_it() {
+        let mut history = InputHistory::new();
+        history.push("old");
+        // First older step from the live draft stashes it and recalls "old".
+        assert_eq!(history.edge_recall_older("draft"), Some("old"));
+        assert_eq!(history.stash(), Some("draft"));
+        // Stepping newer past the newest entry restores the draft byte-for-byte.
+        assert_eq!(history.edge_recall_newer().as_deref(), Some("draft"));
+        assert_eq!(history.stash(), None);
+    }
+
+    #[test]
+    fn edge_recall_older_walks_without_re_stashing() {
+        let mut history = InputHistory::new();
+        history.push("first");
+        history.push("second");
+        assert_eq!(history.edge_recall_older("draft"), Some("second"));
+        // Continued older steps do not re-stash the (now recalled) buffer.
+        assert_eq!(history.edge_recall_older("ignored"), Some("first"));
+        assert_eq!(history.stash(), Some("draft"));
+    }
+
+    #[test]
+    fn edge_recall_older_on_empty_history_is_none() {
+        let mut history = InputHistory::new();
+        assert_eq!(history.edge_recall_older("draft"), None);
+        assert_eq!(history.stash(), None);
+    }
+
+    #[test]
+    fn edge_recall_newer_when_not_recalling_is_none() {
+        let mut history = InputHistory::new();
+        history.push("old");
+        assert_eq!(history.edge_recall_newer(), None);
+    }
 
     #[test]
     fn newline_does_not_submit_and_grows_lines() {
@@ -433,5 +729,82 @@ mod tests {
         let mut history = InputHistory::new();
         assert_eq!(history.recall_older(), None);
         assert_eq!(history.recall_newer(), None);
+    }
+
+    #[test]
+    fn mode_labels_are_the_status_strings() {
+        assert_eq!(InputMode::Norm.label(), "norm");
+        assert_eq!(InputMode::Mult.label(), "Mult");
+        assert_eq!(InputMode::Laat.label(), "1T");
+    }
+
+    #[test]
+    fn toggle_mult_laat_transitions() {
+        // Norm enters Mult even when single-line/empty (FR-015).
+        assert_eq!(InputMode::Norm.toggled_mult_laat(false), InputMode::Mult);
+        // Mult <-> Laat only when multi-line (FR-016).
+        assert_eq!(InputMode::Mult.toggled_mult_laat(true), InputMode::Laat);
+        assert_eq!(InputMode::Laat.toggled_mult_laat(true), InputMode::Mult);
+        // A single-line Mult stays Mult (LAAT needs multiple lines).
+        assert_eq!(InputMode::Mult.toggled_mult_laat(false), InputMode::Mult);
+    }
+
+    #[test]
+    fn caret_line_up_down_preserve_column_and_clamp() {
+        let mut pad = InputPad::new();
+        pad.set_contents("abc\nde\nfghi");
+        // Cursor at end (line 2, col 4). Up clamps to line 1's length (2).
+        assert!(pad.caret_on_last_line());
+        pad.caret_line_up();
+        assert_eq!(pad.cursor_row_col(), (1, 2));
+        // Up again to line 0 keeps the remembered/clamped column (2).
+        pad.caret_line_up();
+        assert_eq!(pad.cursor_row_col(), (0, 2));
+        assert!(pad.caret_on_first_line());
+        // Up on the first line is a no-op.
+        pad.caret_line_up();
+        assert_eq!(pad.cursor_row_col(), (0, 2));
+    }
+
+    #[test]
+    fn caret_motion_does_not_touch_history_or_buffer() {
+        // C4: caret motion changes only the cursor, never the buffer.
+        let mut pad = InputPad::new();
+        pad.set_contents("a\nb");
+        assert!(pad.caret_on_last_line());
+        pad.caret_line_up();
+        assert_eq!(pad.cursor_row_col(), (0, 1));
+        assert_eq!(pad.as_str(), "a\nb");
+    }
+
+    #[test]
+    fn laat_exit_zero_advances_and_clears_flag() {
+        // L2/L5: exit 0 advances the highlight and clears the line's flag.
+        let mut laat = LaatState::new();
+        assert_eq!(laat.highlight, 0);
+        laat.failed_lines.insert(1);
+        laat.submit_line(1);
+        assert_eq!(laat.apply_exit_code(Some(0)), Some(LaatOutcome::Advance));
+        assert_eq!(laat.highlight, 2);
+        assert!(!laat.is_failed(1));
+        assert_eq!(laat.pending, None);
+    }
+
+    #[test]
+    fn laat_nonzero_flags_and_keeps_highlight() {
+        // L3: a non-zero exit flags the line and keeps the highlight.
+        let mut laat = LaatState::new();
+        laat.highlight = 1;
+        laat.submit_line(1);
+        assert_eq!(laat.apply_exit_code(Some(7)), Some(LaatOutcome::Flag));
+        assert_eq!(laat.highlight, 1);
+        assert!(laat.is_failed(1));
+        assert_eq!(laat.pending, None);
+    }
+
+    #[test]
+    fn laat_apply_with_nothing_pending_is_none() {
+        let mut laat = LaatState::new();
+        assert_eq!(laat.apply_exit_code(Some(0)), None);
     }
 }

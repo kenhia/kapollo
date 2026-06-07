@@ -161,7 +161,7 @@ fn truncate_cwd_middle(cwd: &str, max: usize) -> String {
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let text = fit(
         area.width as usize,
-        DEFAULT_MODE,
+        app.mode.label(),
         &app.cwd.display().to_string(),
         app.notice.as_deref(),
         app.last_exit,
