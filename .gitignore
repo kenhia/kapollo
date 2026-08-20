@@ -21,3 +21,6 @@ flamegraph.svg
 
 # local sprint marker (start-sprint skill)
 .korg-sprint-proposal
+
+# Local per-machine MCP server config
+.vscode/mcp.json
