@@ -6,22 +6,28 @@
 ## Now
 
 - **008 — kprojects harness.** Off Spec-Kit onto the minimal harness
-  (korg #1462). Layout and conventions only; no behaviour change.
+  (korg #1462). Layout and conventions only; no behaviour change. **Done.**
 
 ## Next
 
-- **Re-scope the two standing proposals before starting either.** Sprints 005–007
-  shipped work that korg still shows as open, and neither proposal was refreshed
-  afterwards — see sprint 008's follow-ups for the evidence per item. korg #37,
-  #43, #44 and #46 all look shipped; #42, #45 and #47 do not.
-- **kapollo core UX** — korg proposal #176: the output-loss bug on concurrent
-  submit (#34), a running-command indicator (#35), transcript scrolling with
-  context overlap and single-line scroll (#36), and the spurious shell reprompt
-  `/status` triggers via PTY SIGWINCH (#48).
-- **Input & shell commands** — korg proposal #184, sequenced after #176. Of its
-  six items, Ctrl-L semi-clear (#42) and the user prompt in the divider (#47)
-  are genuinely outstanding, and the mouse click-vs-drag threshold (#45) is
-  still research. The proposal may be mostly finished already.
+- **korg proposal #176 — core UX, input & shell commands.** The two standing
+  proposals were verified item by item and merged on 2026-08-19: #184 is
+  declined and #176 now carries **all ten** open items. Only one thing closed
+  — **#43 `/save`**, genuinely shipped in sprint 007.
+
+  Ten items is large for one sprint; the natural split is the original seam.
+  **#34 leads either way** — it is the only correctness bug in the set.
+
+  | | Items |
+  |---|---|
+  | render + correctness | #34 output loss on concurrent submit · #35 running-command indicator · #36 scrolling context overlap + single-line · #37 input-pad prompt char · #48 spurious reprompt on `/status` (PTY SIGWINCH) |
+  | input + shell commands | #42 Ctrl-L semi-clear · #44 transcript filter over block boundaries · #45 click-vs-drag research · #46 whitespace-suppression config knobs · #47 prompt into divider |
+
+  Two planning notes: **#44** collides with the existing `/filter <cmd>` name
+  and needs that decided before it is built; **#47**'s divider prerequisite is
+  satisfied but it still needs OSC 133 `A`/`B` marks out of the injected shell
+  hooks (`src/pty/shell.rs` emits only `C`/`D` + OSC 7).
+
 - **Templated ("fancy") status bar** — user-definable status-line content via a
   small template string, replacing sprint 005's fixed format. Pre-planned in
   `planning/pre-plan-fancy-status-bar.md`; that file used to claim sprint 008,

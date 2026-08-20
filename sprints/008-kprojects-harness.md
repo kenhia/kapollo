@@ -113,21 +113,39 @@ the pin, not of this migration.
 
 ## Follow-ups
 
-- **Both standing proposals need re-scoping before either is started.** Sprints
-  005–007 shipped work korg still shows as open, and neither proposal was
-  refreshed afterwards:
-  - **korg #37** (configurable prompt char, in proposal #176) — `src/config.rs`
-    carries `prompt_char` end to end. Looks shipped.
-  - **korg #43** (`/save`) and **#44** (`/filter`) — both dispatch at
-    `src/slash/mod.rs:58–59`, both documented in the README, both covered by
-    `tests/slash_filter_save.rs`, all three marked "sprint 007". Look shipped.
-  - **korg #46** (whitespace-only line suppression) — shipped in **sprint 005**;
-    `tests/input_submit_trim.rs` names the work item in its own header comment.
-  - Genuinely still open: **#42** (Ctrl-L semi-clear — no implementation
-    anywhere in `src/`), **#47** (user prompt in the divider — the `[divider]`
-    config carries only `enabled`), and **#45**, which is research.
-
-  Verifying and closing these is its own pass, deliberately not done inside a
-  harness chore. Proposal #184 in particular may be largely finished.
+- **Both standing proposals were stale. Verified and merged, 2026-08-19** — see
+  the postscript below. #184 declined, #176 now carries all ten open items, and
+  **#43 `/save`** closed as the only one genuinely shipped.
 - `.vscode/mcp.json` carries an uncommitted change dropping the `kwi` MCP server
   — Ken's in-flight work, predating this sprint. Left alone, not committed.
+
+## Postscript — the proposal verification pass, 2026-08-19
+
+This sprint's first pass flagged four work items as "looks shipped" on the
+strength of matching names in the source. Ken asked for them verified and
+closed. **Reading each work item's acceptance criteria refuted three of the
+four.** The corrected result:
+
+| WI | First read | Verified | Why the first read was wrong |
+|---|---|---|---|
+| **#43** `/save` | shipped | **shipped — closed** | correct. Answered all five of the WI's open design questions, including the evicted-block "unavailable" case (`"Save failed, previous buffer not found"`), and added an overwrite/append/cancel prompt it never asked for. `src/app.rs:1078`. |
+| **#37** input-pad prompt char | shipped | **open** | `prompt_char` is in `src/config.rs`, but the WI says to *reuse* that existing transcript-echo config — so finding it confirms the **prerequisite**, not the feature. Referenced only from `src/ui/transcript.rs` and `src/app.rs`; `src/ui/input_pad.rs` has no prompt at all, and the required `input_prompt` toggle does not exist. |
+| **#44** `/filter` | shipped | **open** | `/filter <cmd>` ships (sprint 007, FR-025) and pipes the previous block's output through a shell command. The WI asks for an interactive filter over the **transcript**, keyed on block boundaries and exit codes, with an overlay (FR-022, SC-008). Same command name, different feature. |
+| **#46** whitespace suppression | shipped | **open** | The WI's own body splits it and says so: the *default* trailing-strip shipped in sprint 005 as T034 and is **explicitly out of this WI's scope**; the WI **is** the deferred config surface — `suppress_multiline_whitespace` and `suppress_multiline_trailing_whitespace_lines`. Neither key exists in `TOP_LEVEL_KEYS`. |
+
+**The lesson, since it cost a wrong report: a matching identifier in the source
+is not evidence a work item is done.** The three misses were, respectively, a
+*prerequisite the item itself names*, a *different feature sharing a command
+name*, and the *half explicitly carved out* of the item's scope. In two of the
+three the work item's own text said as much; only the code was read.
+
+Also confirmed genuinely open, with evidence:
+
+- **#42** Ctrl-L semi-clear — no `semi_clear`/`SemiClear` in `src/`; the only
+  clear-ish action is `Action::ClearStatusMessage`.
+- **#47** prompt into divider — `src/ui/divider.rs:3` says it outright: *"A
+  future feature (kwi #47) may fold the shell prompt into this rule; for now it
+  is a single horizontal line."* Its stated prerequisite **is** satisfied
+  (sprint 005 T035 restored the divider), but it still needs OSC 133 `A`/`B`
+  from the injected shell hooks — `src/pty/shell.rs` emits only `C`/`D` + OSC 7.
+- **#45** click-vs-drag threshold — research, unchanged since filing.
