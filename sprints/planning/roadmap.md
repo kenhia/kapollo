@@ -21,12 +21,18 @@
   | | Items |
   |---|---|
   | render + correctness | #34 output loss on concurrent submit · #35 running-command indicator · #36 scrolling context overlap + single-line · #37 input-pad prompt char · #48 spurious reprompt on `/status` (PTY SIGWINCH) |
-  | input + shell commands | #42 Ctrl-L semi-clear · #44 transcript filter over block boundaries · #45 click-vs-drag research · #46 whitespace-suppression config knobs · #47 prompt into divider |
+  | input + shell commands | #42 Ctrl-L semi-clear · #45 click-vs-drag research · #46 whitespace-suppression config knobs · #47 prompt into divider · #1463 rename `/filter` → `/pipe` |
 
-  Two planning notes: **#44** collides with the existing `/filter <cmd>` name
-  and needs that decided before it is built; **#47**'s divider prerequisite is
-  satisfied but it still needs OSC 133 `A`/`B` marks out of the injected shell
-  hooks (`src/pty/shell.rs` emits only `C`/`D` + OSC 7).
+  **Two items closed as already shipped:** #43 `/save`, and #44 `/filter` — the
+  latter after Ken confirmed the shipped pipe-the-previous-block behaviour was
+  the intent all along, and that its work item's "filter the transcript" framing
+  overstated it. See sprint 008's second postscript.
+
+  Two planning notes: **#1463** is the rename that came out of that — `/pipe`
+  describes what the command does, `/filter` does not, and the misnomer already
+  cost one wrong report. **#47**'s divider prerequisite is satisfied but it
+  still needs OSC 133 `A`/`B` marks out of the injected shell hooks
+  (`src/pty/shell.rs` emits only `C`/`D` + OSC 7).
 
 - **Templated ("fancy") status bar** — user-definable status-line content via a
   small template string, replacing sprint 005's fixed format. Pre-planned in
