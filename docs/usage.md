@@ -119,7 +119,8 @@ inline color appear exactly as the program intended.
 
 | Mouse action | Result |
 |--------------|--------|
-| **Left-drag** | Select a range of text; auto-scrolls when you drag past the top or bottom edge |
+| **Left-click** (no drag) | Nothing — a plain click never places a selection |
+| **Left-drag** | Select a range of text; auto-scrolls when you drag past the top or bottom edge. To select a single cell on purpose, drag out and back |
 | **Right-click** on an active selection | Copy the selection |
 | **Right-click** with no selection | Copy the block under the cursor, including its command line |
 | **Scroll wheel** | Scroll the transcript (see `scroll.wheel_lines`) |
