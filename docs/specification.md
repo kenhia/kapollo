@@ -212,6 +212,32 @@ key input directly.
   `1T` with the first line highlighted. Filesystem errors for all three commands
   surface as status messages, never panics.
 
+### Core UX, input & shell commands (sprint 010)
+- **FR-S26** Queue in-flight commands (FIFO): a command submitted while another
+  runs waits its turn — its bytes reach the PTY immediately (type-ahead), but
+  no output is lost and each end mark seals its own block.
+- **FR-S27** Indicate a running command: the status bar's exit slot shows `…`
+  until completion (a glyph, so it survives `NO_COLOR` and consecutive equal
+  exit codes), and the input-pad prompt glyph wears `running_color`.
+- **FR-S28** Show the prompt glyph (`{prompt_char} `) at the start of the input
+  pad, matching the transcript echo; continuation lines indent to one left
+  edge; opt-out via `input_prompt`.
+- **FR-S29** Provide `semi_clear` (default `Ctrl+L`): scroll the visible pane
+  into scrollback and blank the viewport, keeping history reachable — unlike
+  `/clear`, the full reset.
+- **FR-S30** Make multiline whitespace suppression configurable:
+  `suppress_multiline_trailing_whitespace_lines` (default true, the shipped
+  trailing-strip) and `suppress_multiline_whitespace` (default false, interior
+  lines too; overrides the trailing knob). Single-line input is never altered.
+- **FR-S31** Capture the shell prompt between the hooks' OSC 133 `A`/`B` marks
+  and, with `[divider] prompt = true`, fold it into the divider rule with its
+  tail (`prompt_bring_down` chars, or a multi-line prompt's last line) as the
+  input pad's prefix; multiline input drops the prefix. Unavailable in
+  sentinel mode.
+- **FR-S32** A plain left-click places no selection: release activates one only
+  if the pointer left the anchor cell during the drag, so an accidental
+  one-cell selection can never hijack `Ctrl-C` or right-click.
+
 ## 3. Key Entities
 
 - **Block** — one command + retained output + exit code, plus its grid
@@ -224,9 +250,11 @@ key input directly.
   scrollback the transcript pad renders from.
 - **Session / Transcript** — ordered list of blocks; drives caps and chrome.
 - **Input History** — kapollo's own ordered list of submitted inputs.
-- **Configuration** — shell, leader char, output caps, and the `mouse`,
-  `clipboard`, `scroll` (incl. `context_lines`), `status`, and `divider`
-  settings; defaults when absent.
+- **Configuration** — shell, leader char, prompt glyph (`prompt_char` /
+  `prompt_color` / `input_prompt` / `running_color`), the multiline whitespace
+  knobs, output caps, and the `mouse`, `clipboard`, `scroll` (incl.
+  `context_lines`), `status`, and `divider` (incl. the prompt fold) settings;
+  defaults when absent.
 - **Keymap** — the data-driven `Action` → `Binding` (primary + optional
   alternate) table, with a zero-config default map, `[keymap]` overrides
   (clear/rebind, last-declared-wins), and per-mode (`norm`) sections.
@@ -262,5 +290,9 @@ key input directly.
   Sprint 006 adds the configurable keymap engine (`[keymap]`, `/reload-config`,
   live `/keys`). Sprint 007 adds LAAT mode and the argument-bearing slash
   commands `/save`, `/pipe` and `/load`; sprint 009 renamed `/filter` to `/pipe`.
+  Sprint 010 fixes typed-ahead output loss (the in-flight FIFO), adds the
+  running indicator, input-pad prompt, `Ctrl+L` semi-clear, whitespace-
+  suppression knobs, the divider prompt fold (OSC 133 `A`/`B`), and
+  click-vs-drag selection.
 - **Out of scope**: macOS/Windows, history DB persistence, AI layer, fuzzy
   search, markdown rendering.
