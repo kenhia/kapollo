@@ -130,14 +130,14 @@ four.** The corrected result:
 |---|---|---|---|
 | **#43** `/save` | shipped | **shipped — closed** | correct. Answered all five of the WI's open design questions, including the evicted-block "unavailable" case (`"Save failed, previous buffer not found"`), and added an overwrite/append/cancel prompt it never asked for. `src/app.rs:1078`. |
 | **#37** input-pad prompt char | shipped | **open** | `prompt_char` is in `src/config.rs`, but the WI says to *reuse* that existing transcript-echo config — so finding it confirms the **prerequisite**, not the feature. Referenced only from `src/ui/transcript.rs` and `src/app.rs`; `src/ui/input_pad.rs` has no prompt at all, and the required `input_prompt` toggle does not exist. |
-| **#44** `/filter` | shipped | **open** | `/filter <cmd>` ships (sprint 007, FR-025) and pipes the previous block's output through a shell command. The WI asks for an interactive filter over the **transcript**, keyed on block boundaries and exit codes, with an overlay (FR-022, SC-008). Same command name, different feature. |
+| **#44** `/filter` | shipped | **shipped — closed** | The verification pass said *open, different feature*, and **that was wrong** — see the second postscript. |
 | **#46** whitespace suppression | shipped | **open** | The WI's own body splits it and says so: the *default* trailing-strip shipped in sprint 005 as T034 and is **explicitly out of this WI's scope**; the WI **is** the deferred config surface — `suppress_multiline_whitespace` and `suppress_multiline_trailing_whitespace_lines`. Neither key exists in `TOP_LEVEL_KEYS`. |
 
 **The lesson, since it cost a wrong report: a matching identifier in the source
-is not evidence a work item is done.** The three misses were, respectively, a
-*prerequisite the item itself names*, a *different feature sharing a command
-name*, and the *half explicitly carved out* of the item's scope. In two of the
-three the work item's own text said as much; only the code was read.
+is not evidence a work item is done.** The misses were, respectively, a
+*prerequisite the item itself names* (#37) and the *half explicitly carved out*
+of the item's scope (#46). In both, the work item's own text said as much; only
+the code was read.
 
 Also confirmed genuinely open, with evidence:
 
@@ -149,3 +149,37 @@ Also confirmed genuinely open, with evidence:
   (sprint 005 T035 restored the divider), but it still needs OSC 133 `A`/`B`
   from the injected shell hooks — `src/pty/shell.rs` emits only `C`/`D` + OSC 7.
 - **#45** click-vs-drag threshold — research, unchanged since filing.
+
+## Second postscript — #44 was done after all, 2026-08-19
+
+The pass above closed #43 and left #44 open, reasoning that the shipped
+`/filter <cmd>` (pipe a block's output through a shell command) was a different
+feature from the one #44's title and body describe (an interactive filter over
+the *transcript*, by block boundary and exit code, with an overlay).
+
+**Ken corrected it:** the pipe behaviour is what he actually wanted.
+
+> *"I think this was my thought that I could take the last output and pipe it
+> through a new command. So if initial command was `ls -l` and I got a long list
+> of files, I could follow it up with `/filter grep foo` and get the files that
+> had 'foo' in them."*
+
+`docs/usage.md:155` documents precisely that, chaining included. The ambitious
+framing in #44's body was never the intent, so **#44 is closed against sprint
+007** — not deferred; there is nothing to carry forward.
+
+**So the lesson above has a second half.** A matching identifier in the source is
+not evidence an item is done — **and a mismatched work-item description is not
+evidence it is undone.** Both readings compare code against a written record that
+can itself be stale or overstated. Where the two disagree, only the author
+settles it, and asking is cheaper than either guess.
+
+**What survives is the name.** Ken: *"`/pipe` seems the better choice anyway."*
+He is right, and this sprint is the evidence — the name `/filter` is what made a
+finished feature read as unbuilt. Filed as **korg #1463** (S): rename
+`/filter` → `/pipe` across the dispatcher, `run_filter`, the temp-file name, the
+user-facing notices, the help text and the docs. It carries one decision (keep
+`/filter` as an alias, per the `/quit`|`/exit` precedent, or hard-rename —
+recommendation is hard-rename) and one contradiction to fix in passing:
+`docs/specification.md:265` still lists `/filter` as deferred while FR-S24 at
+:208 specifies it as shipped.
