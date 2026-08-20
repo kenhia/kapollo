@@ -17,6 +17,8 @@ pub const PER_BLOCK_BYTES_HARD_MAX: u64 = 64 * 1024 * 1024;
 const DEFAULT_LEADER_CHAR: char = '/';
 const DEFAULT_PROMPT_CHAR: char = 'λ';
 const DEFAULT_PROMPT_COLOR: Color = Color::Red;
+// The input pad shows the prompt glyph before the composing text (kwi #37).
+const DEFAULT_INPUT_PROMPT: bool = true;
 const DEFAULT_PER_BLOCK_BYTES: u64 = 1024 * 1024; // 1 MiB
 const DEFAULT_PER_BLOCK_LINES: u64 = 50_000;
 const DEFAULT_TRANSCRIPT_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
@@ -43,6 +45,7 @@ const TOP_LEVEL_KEYS: &[&str] = &[
     "leader_char",
     "prompt_char",
     "prompt_color",
+    "input_prompt",
     "caps",
     "mouse",
     "clipboard",
@@ -75,6 +78,9 @@ pub struct Config {
     /// Color applied to the prompt character when color is enabled
     /// (default red; FR-011).
     pub prompt_color: Color,
+    /// Whether the input pad shows the prompt glyph (`{prompt_char} `) before
+    /// the composing text (default true; kwi #37).
+    pub input_prompt: bool,
     /// Output retention caps.
     pub caps: Caps,
     /// Mouse capture / selection behavior (sprint 004, D28).
@@ -154,6 +160,7 @@ impl Default for Config {
             leader_char: DEFAULT_LEADER_CHAR,
             prompt_char: DEFAULT_PROMPT_CHAR,
             prompt_color: DEFAULT_PROMPT_COLOR,
+            input_prompt: DEFAULT_INPUT_PROMPT,
             caps: Caps::default(),
             mouse: Mouse::default(),
             clipboard: Clipboard::default(),
@@ -272,6 +279,7 @@ struct RawConfig {
     leader_char: Option<String>,
     prompt_char: Option<String>,
     prompt_color: Option<String>,
+    input_prompt: Option<bool>,
     caps: Option<RawCaps>,
     mouse: Option<RawMouse>,
     clipboard: Option<RawClipboard>,
@@ -388,6 +396,7 @@ impl RawConfig {
             leader_char,
             prompt_char,
             prompt_color,
+            input_prompt: self.input_prompt.unwrap_or(DEFAULT_INPUT_PROMPT),
             caps,
             mouse: {
                 let raw = self.mouse.unwrap_or_default();

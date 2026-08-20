@@ -218,6 +218,11 @@ prompt_char = "λ"
 # Color of the prompt glyph (named color; default "red"). Honors NO_COLOR.
 prompt_color = "red"
 
+# Show the prompt glyph (prompt_char + space) at the start of the input pad,
+# matching the transcript echo (default true). Continuation lines of a
+# multiline buffer are indented to keep one left edge.
+input_prompt = true
+
 [caps]
 # Per-block output retention. Defaults: 1 MiB / 50000 lines.
 # Hard maximum for per_block_bytes is 64 MiB.

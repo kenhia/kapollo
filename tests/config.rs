@@ -38,6 +38,15 @@ per_block_lines = 10
 }
 
 #[test]
+fn input_prompt_defaults_on_and_can_be_disabled() {
+    // kwi #37: the input-pad prompt glyph is opt-out.
+    assert!(Config::default().input_prompt);
+    let cfg = Config::from_toml("input_prompt = false\n", Path::new("test.toml"))
+        .expect("input_prompt should parse");
+    assert!(!cfg.input_prompt);
+}
+
+#[test]
 fn per_block_bytes_clamped_to_hard_max() {
     let text = format!(
         "[caps]\nper_block_bytes = {}\n",
