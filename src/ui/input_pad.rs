@@ -37,14 +37,20 @@ fn prefix_span(prompt: Option<(char, Style)>, line_index: usize) -> Option<Span<
 }
 
 /// The input-pad prompt glyph and its style, or `None` when disabled. The
-/// glyph wears `prompt_color` when idle and the running color while a command
-/// is in flight (kwi #35), plain under `NO_COLOR`.
+/// glyph wears `prompt_color` when idle and `running_color` while a command
+/// is in flight (kwi #35), plain under `NO_COLOR` (where the status bar's
+/// running marker carries the cue instead).
 fn prompt(app: &App) -> Option<(char, Style)> {
     if !app.config.input_prompt {
         return None;
     }
     let style = if super::color_enabled() {
-        Style::default().fg(app.config.prompt_color)
+        let color = if app.command_running() {
+            app.config.running_color
+        } else {
+            app.config.prompt_color
+        };
+        Style::default().fg(color)
     } else {
         Style::default()
     };

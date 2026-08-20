@@ -47,6 +47,20 @@ fn input_prompt_defaults_on_and_can_be_disabled() {
 }
 
 #[test]
+fn running_color_defaults_yellow_and_parses_names() {
+    // kwi #35: the input-pad prompt wears this color while a command runs.
+    use ratatui::style::Color;
+    assert_eq!(Config::default().running_color, Color::Yellow);
+    let cfg = Config::from_toml("running_color = \"cyan\"\n", Path::new("test.toml"))
+        .expect("running_color should parse");
+    assert_eq!(cfg.running_color, Color::Cyan);
+    // An unknown color name warns and keeps the default, like prompt_color.
+    let cfg = Config::from_toml("running_color = \"nonsense\"\n", Path::new("test.toml"))
+        .expect("unknown color must not be fatal");
+    assert_eq!(cfg.running_color, Color::Yellow);
+}
+
+#[test]
 fn per_block_bytes_clamped_to_hard_max() {
     let text = format!(
         "[caps]\nper_block_bytes = {}\n",

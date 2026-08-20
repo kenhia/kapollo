@@ -259,6 +259,13 @@ impl App {
         self.grid.stable_row_at(0, self.grid.cursor().1)
     }
 
+    /// Whether a submitted command is still awaiting its end mark. Drives the
+    /// running indicator: the status bar's exit slot shows a running marker and
+    /// the input-pad prompt wears `running_color` while this is true (kwi #35).
+    pub fn command_running(&self) -> bool {
+        !self.assembler.is_idle()
+    }
+
     /// App-level reaction to a boundary mark, after block association:
     /// exit-code bookkeeping, LAAT gating, `/pipe` completion, and OSC 7 cwd
     /// tracking. `closed` is the block the mark just sealed, if any.

@@ -223,6 +223,11 @@ prompt_color = "red"
 # multiline buffer are indented to keep one left edge.
 input_prompt = true
 
+# Color the input-pad prompt glyph wears while a command is running (default
+# "yellow"). Under NO_COLOR the status bar's "…" exit-slot marker carries the
+# running cue instead.
+running_color = "yellow"
+
 [caps]
 # Per-block output retention. Defaults: 1 MiB / 50000 lines.
 # Hard maximum for per_block_bytes is 64 MiB.
@@ -287,7 +292,11 @@ pad a horizontal **divider** rule separates the transcript from your input
 Beneath the input pad a single-line **status bar** shows, left to right: a
 4-column **mode** field (`norm` by default), the current working directory
 (which follows `cd`), an optional transient **message**, and the last command's
-**exit code** hugging the right edge. The bar never wraps: when space runs short
+**exit code** hugging the right edge. While a command is running the exit slot
+shows `…` instead, and the input-pad prompt glyph wears `running_color` — so a
+slow, silent command is visibly still going, and its completion is visible even
+when the new exit code equals the old one (with or without color).
+The bar never wraps: when space runs short
 the message is shortened first, then the cwd is middle-ellipsized (e.g.
 `/home/…/kapollo`), while the mode and exit code are always preserved. Toggle the
 bar with `/status`; it auto-hides on terminals shorter than 10 rows.

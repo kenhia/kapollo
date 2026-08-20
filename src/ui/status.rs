@@ -22,6 +22,10 @@ use crate::app::App;
 const MODE_WIDTH: usize = 4;
 /// The default mode literal until richer modes exist.
 pub const DEFAULT_MODE: &str = "norm";
+/// Shown in the exit slot while a command is running (kwi #35): a glyph
+/// change rather than a color, so the cue survives `NO_COLOR` and is visible
+/// even when consecutive commands share an exit code.
+pub const RUNNING_MARKER: &str = "…";
 const ELLIPSIS: char = '…';
 /// Below this terminal height the bar is hidden so a short window keeps every
 /// row for the transcript and input (FR-022).
@@ -36,13 +40,15 @@ pub fn is_visible(enabled: bool, rows: u16) -> bool {
 /// Compose the status bar's single line to exactly `width` columns.
 ///
 /// `mode` is normalized to four columns. `message` is an optional transient
-/// notice. `exit` is shown only when `Some` and is never broken (FR-023).
+/// notice. `exit` — the last exit code, or the running marker while a command
+/// is in flight (kwi #35) — is shown only when `Some` and is never broken
+/// (FR-023).
 pub fn fit(
     width: usize,
     mode: &str,
     cwd: &str,
     message: Option<&str>,
-    exit: Option<i32>,
+    exit: Option<&str>,
 ) -> String {
     if width == 0 {
         return String::new();
@@ -50,8 +56,7 @@ pub fn fit(
     let mode4 = fit_mode(mode);
     let prefix = format!("{mode4} | ");
     let prefix_len = prefix.chars().count();
-    let exit_str = exit.map(|c| c.to_string());
-    let exit_ref = exit_str.as_deref();
+    let exit_ref = exit;
     let body = width.saturating_sub(prefix_len);
 
     let cwd_full_len = cwd.chars().count();
@@ -159,12 +164,20 @@ fn truncate_cwd_middle(cwd: &str, max: usize) -> String {
 
 /// Render the fixed status bar into `area` (a single row beneath the input).
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
+    // While a command runs the exit slot shows the running marker; completion
+    // restores the (new) exit code, so the transition is visible even when
+    // consecutive exit codes match (kwi #35).
+    let exit = if app.command_running() {
+        Some(RUNNING_MARKER.to_string())
+    } else {
+        app.last_exit.map(|c| c.to_string())
+    };
     let text = fit(
         area.width as usize,
         app.mode.label(),
         &app.cwd.display().to_string(),
         app.notice.as_deref(),
-        app.last_exit,
+        exit.as_deref(),
     );
     let mut line = Line::from(text);
     if super::color_enabled() {

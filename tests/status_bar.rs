@@ -7,7 +7,7 @@ use kapollo::ui::status;
 
 #[test]
 fn roomy_bar_anchors_mode_left_and_exit_right() {
-    let s = status::fit(40, "norm", "/home/ken", None, Some(0));
+    let s = status::fit(40, "norm", "/home/ken", None, Some("0"));
     assert_eq!(s.chars().count(), 40, "bar must fill exactly the width");
     // prefix(7) + cwd(9) + pad + "| 0"(3) == 40 -> pad == 21
     assert_eq!(s, format!("norm | /home/ken{}| 0", " ".repeat(21)));
@@ -15,7 +15,7 @@ fn roomy_bar_anchors_mode_left_and_exit_right() {
 
 #[test]
 fn message_is_right_justified_against_exit() {
-    let s = status::fit(50, "norm", "/home/ken", Some("copied"), Some(0));
+    let s = status::fit(50, "norm", "/home/ken", Some("copied"), Some("0"));
     assert_eq!(s.chars().count(), 50);
     // prefix(7) + cwd(9) + pad + "| copied | 0"(12) == 50 -> pad == 22
     assert_eq!(s, format!("norm | /home/ken{}| copied | 0", " ".repeat(22)));
@@ -43,7 +43,13 @@ fn mode_field_is_four_columns() {
 fn message_truncates_before_the_cwd() {
     // Narrow bar: the message is shortened (trailing ellipsis) while the cwd and
     // exit field stay intact.
-    let s = status::fit(34, "norm", "/x", Some("hello world this is long"), Some(0));
+    let s = status::fit(
+        34,
+        "norm",
+        "/x",
+        Some("hello world this is long"),
+        Some("0"),
+    );
     assert_eq!(s.chars().count(), 34);
     assert!(s.starts_with("norm | /x"), "cwd preserved: {s:?}");
     assert!(s.ends_with("| 0"), "exit preserved: {s:?}");
@@ -52,7 +58,7 @@ fn message_truncates_before_the_cwd() {
 
 #[test]
 fn cwd_middle_ellipsizes_only_after_message_is_gone() {
-    let s = status::fit(24, "norm", "/home/ken/src/tools/kapollo", None, Some(0));
+    let s = status::fit(24, "norm", "/home/ken/src/tools/kapollo", None, Some("0"));
     assert_eq!(s.chars().count(), 24);
     assert!(s.starts_with("norm | "), "mode intact: {s:?}");
     assert!(s.ends_with("| 0"), "exit intact: {s:?}");
@@ -69,7 +75,7 @@ fn never_exceeds_width_under_pressure() {
             "norm",
             "/very/long/working/directory/path/segment",
             Some("a transient notice message that is also quite long"),
-            Some(137),
+            Some("137"),
         );
         assert_eq!(
             s.chars().count(),
@@ -83,8 +89,21 @@ fn never_exceeds_width_under_pressure() {
 }
 
 #[test]
+fn running_marker_rides_the_exit_slot() {
+    // kwi #35: while a command runs, the exit slot shows the running marker —
+    // a glyph change, so the cue survives NO_COLOR and is visible even when
+    // consecutive commands share an exit code.
+    let s = status::fit(40, "norm", "/home/ken", None, Some(status::RUNNING_MARKER));
+    assert_eq!(s.chars().count(), 40);
+    assert!(
+        s.ends_with(&format!("| {}", status::RUNNING_MARKER)),
+        "running marker anchored right: {s:?}"
+    );
+}
+
+#[test]
 fn zero_width_is_empty() {
-    assert_eq!(status::fit(0, "norm", "/a", None, Some(0)), "");
+    assert_eq!(status::fit(0, "norm", "/a", None, Some("0")), "");
 }
 
 #[test]
