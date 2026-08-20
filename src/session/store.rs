@@ -1,7 +1,7 @@
 //! Block store: the in-memory, canonical source of block text (R3, sprint 004).
 //!
 //! R3 supersedes D29's reconstruct-from-grid lean — retained output is the
-//! source of truth for `/save`, `/filter`, and rendering. All callers reach text
+//! source of truth for `/save`, `/pipe`, and rendering. All callers reach text
 //! only through the [`BlockText`] accessor seam, so a future SQLite secondary
 //! backing is a drop-in with no caller changes (FR-019, FR-020, SC-010).
 //!

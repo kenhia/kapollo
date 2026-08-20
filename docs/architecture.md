@@ -26,7 +26,7 @@ terminal via **passthrough**.
 - **Wrap, don't reinvent** the shell (D1/D2): fidelity of cwd, env, aliases,
   pipes, exit codes comes from the real shell.
 - **Blocks are the source of truth** (D3/D8): a block holds the command, its
-  captured output bytes, and its exit code. The UI, `/save`, `/filter`, the
+  captured output bytes, and its exit code. The UI, `/save`, `/pipe`, the
   future history DB, and the future AI layer are all just consumers and
   producers of blocks.
 - **~~Don't build a terminal emulator~~ Maintain a grid for the main screen**
@@ -106,7 +106,7 @@ terminal via **passthrough**.
   bar) and `/keys` (list the active key bindings from the action registry).
   Handlers receive an app context (read State / blocks, write a new block,
   mutate UI). `/exit` is an alias of `/quit`. Designed so later commands
-  (`/save`, `/filter`, AI commands) and plugins slot in unchanged.
+  (`/save`, `/pipe`, AI commands) and plugins slot in unchanged.
 - **Input editing & key actions** — A named-action registry (`src/action`)
   maps key chords to stable `Action` names (readline-style line motion, word
   motion, keyboard text selection, kills, and transcript scroll), resolved in
@@ -139,7 +139,7 @@ terminal via **passthrough**.
 ## 3. The Block Lifecycle
 
 A **block** is one command + its output + exit code. This is the central
-data structure (D8) and the foundation for `/save`, `/filter`, the history
+data structure (D8) and the foundation for `/save`, `/pipe`, the history
 DB (D13), and AI (D11).
 
 ```
@@ -427,7 +427,7 @@ A block is a row-range annotation over the grid's scrollback: `{ command,
 output, exit_code, row_range (StableRowIndex), cwd, started_at/ended_at →
 duration, state }`. **R3 (sprint 004)** makes an **in-memory block store** the
 canonical source of block text (retained output, byte/text-faithful `/save`),
-superseding D29's reconstruct-from-grid lean. All callers (`/save`, `/filter`,
+superseding D29's reconstruct-from-grid lean. All callers (`/save`, `/pipe`,
 render) reach text **only** through `block.text()` / `block.text_with_command()`
 (plus `duration()`), so a future SQLite secondary backing is a drop-in with no
 caller changes. The existing `ringbuf::OutputBuffer` is reused as the bounded
@@ -538,16 +538,22 @@ state lives in `src/input/mod.rs` (pure pieces) and is wired in `src/app.rs`.
   slot is occupied is a no-op (FR-020). The next `submit` — shell or slash alike
   — restores the snapshot and clears the slot (FR-019).
 
-### 15.4 Slash commands `/save`, `/filter`, `/load`
-- `SlashCommand` gains argument-bearing `Save(String)`, `Filter(String)`, and
+### 15.4 Slash commands `/save`, `/pipe`, `/load`
+
+> `/pipe` shipped in sprint 007 as `/filter` and was hard-renamed in sprint 009
+> (korg #1463), with no alias kept. The behaviour below is unchanged: it pipes
+> one block's output through a command, it does not filter the transcript, and
+> the old name said otherwise.
+
+- `SlashCommand` gains argument-bearing `Save(String)`, `Pipe(String)`, and
   `Load(String)` variants (dispatch splits the verb from the trimmed remainder;
   argument-less verbs still require an exact match).
 - `/save` writes the most recent sealed, non-synthetic block's exact stored
   output to a cwd-relative (`~`-expanded) path; an existing file defers to a
   `PendingPrompt { path, bytes }` that `App::on_key` resolves first
-  (`O`/`A`/`C`). `/filter` materializes the previous output to a temp file and
+  (`O`/`A`/`C`). `/pipe` materializes the previous output to a temp file and
   runs `cat <temp> | <cmd>` via the shell as a normal block titled
-  `{leader}filter <cmd>`, so it chains as the new previous output. `/load` reads
+  `{leader}pipe <cmd>`, so it chains as the new previous output. `/load` reads
   a file's lines into the buffer and enters `Laat` with line 0 highlighted.
   Filesystem operations are system-boundary ops: errors surface as status
   messages, never panics (Constitution VII).

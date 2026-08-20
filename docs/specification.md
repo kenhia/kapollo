@@ -180,7 +180,7 @@ key input directly.
 - **FR-S17** Publish `docs/keymap-defaults.toml` listing every action's default,
   kept in sync with the code by an automated test.
 
-### Input modes, LAAT & filtering (sprint 007)
+### Input modes, LAAT & piping (sprint 007)
 - **FR-S18** Track an input **mode** (`Norm`/`Mult`/`Laat`) shown on the status
   bar as `norm`/`Mult`/`1T`; `Norm` recalls history on Up/Down while `Mult`/`1T`
   move the caret between buffer lines.
@@ -205,7 +205,7 @@ key input directly.
 - **FR-S23** Add `/save <file>` to write the most recent sealed block's exact
   stored output to a cwd-relative (`~`-expanded) path, prompting
   `[O]verwrite/[A]ppend/[C]ancel` when the file exists.
-- **FR-S24** Add `/filter <cmd>` to pipe the previous output through `<cmd>` via
+- **FR-S24** Add `/pipe <cmd>` to pipe the previous output through `<cmd>` via
   the shell (a real block, so pipes/aliases work and it chains as the new
   previous output).
 - **FR-S25** Add `/load <file>` to load a file's lines into the buffer and enter
@@ -218,7 +218,7 @@ key input directly.
   `row_range` (stable-row anchored), `cwd`, start/end timestamps (and derived
   `duration`), an `available` flag, and reserved `private`/`save_output` flags.
 - **Block Store** — the canonical, bounded, in-memory collection of blocks and
-  the source of truth for copy (and future `/save`/`/filter`); text is reached
+  the source of truth for copy (and `/save`/`/pipe`); text is reached
   only through the `BlockText` accessor seam and survives grid eviction.
 - **Grid** — the embedded `wezterm-term` emulator: the authoritative screen +
   scrollback the transcript pad renders from.
@@ -260,6 +260,7 @@ key input directly.
   history), US3 (passthrough), US4 (interrupt/control/exit). Sprint 004 adds the
   native terminal grid, mouse selection/copy, and the canonical block store.
   Sprint 006 adds the configurable keymap engine (`[keymap]`, `/reload-config`,
-  live `/keys`).
-- **Out of scope**: macOS/Windows, history DB persistence, AI layer, `/save`,
-  `/filter` (deferred; tracked separately), fuzzy search, markdown rendering.
+  live `/keys`). Sprint 007 adds LAAT mode and the argument-bearing slash
+  commands `/save`, `/pipe` and `/load`; sprint 009 renamed `/filter` to `/pipe`.
+- **Out of scope**: macOS/Windows, history DB persistence, AI layer, fuzzy
+  search, markdown rendering.
