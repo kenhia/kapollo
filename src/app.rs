@@ -69,7 +69,7 @@ pub struct App {
     processor: OutputProcessor,
     current_block: Option<BlockId>,
     /// The canonical, retained block store — the source of truth for `/save`,
-    /// `/filter`, and block-aware copy. Survives grid scrollback eviction (R3).
+    /// `/pipe`, and block-aware copy. Survives grid scrollback eviction (R3).
     pub store: BlockStore,
     /// The store block currently capturing output, paired with `current_block`.
     current_store_block: Option<BlockId>,
@@ -79,9 +79,9 @@ pub struct App {
     /// A pending `/save` overwrite prompt (sprint 007, FR-023): while set,
     /// `on_key` consumes the next key to resolve overwrite/append/cancel.
     pending_prompt: Option<PendingPrompt>,
-    /// True while a `/filter` shell round-trip is in flight, so its completion
-    /// can surface a `filter non-zero exit` status message (sprint 007, FR-027).
-    filter_active: bool,
+    /// True while a `/pipe` shell round-trip is in flight, so its completion
+    /// can surface a `pipe non-zero exit` status message (sprint 007, FR-027).
+    pipe_active: bool,
     /// The one-item input push/pop stack (sprint 007, FR-018…FR-020): a pushed
     /// snapshot is restored on the next submit. `None` means the slot is empty.
     pushed: Option<crate::input::InputSnapshot>,
@@ -134,7 +134,7 @@ impl App {
             current_store_block: None,
             passthrough: false,
             pending_prompt: None,
-            filter_active: false,
+            pipe_active: false,
             pushed: None,
             should_quit: false,
         })
@@ -226,12 +226,12 @@ impl App {
                                 // LAAT stepping: gate the highlight on the exit
                                 // code of the line just submitted (FR-004).
                                 self.apply_laat_gating(exit_code);
-                                // A completed `/filter` round-trip surfaces a
+                                // A completed `/pipe` round-trip surfaces a
                                 // non-zero exit as a status message (FR-027).
-                                if self.filter_active {
-                                    self.filter_active = false;
+                                if self.pipe_active {
+                                    self.pipe_active = false;
                                     if exit_code.is_some_and(|c| c != 0) {
-                                        self.notice = Some("filter non-zero exit".into());
+                                        self.notice = Some("pipe non-zero exit".into());
                                     }
                                 }
                             }
@@ -1026,9 +1026,9 @@ impl App {
             // `/save <path>` writes the previous block's exact output to a file,
             // prompting before overwriting an existing file (sprint 007, FR-021).
             Dispatch::Command(SlashCommand::Save(path)) => self.run_save(&path),
-            // `/filter <cmd>` pipes the previous block's output through `<cmd>`
+            // `/pipe <cmd>` pipes the previous block's output through `<cmd>`
             // via the shell, chaining into a new block (sprint 007, FR-025).
-            Dispatch::Command(SlashCommand::Filter(cmd)) => self.run_filter(&cmd),
+            Dispatch::Command(SlashCommand::Pipe(cmd)) => self.run_pipe(&cmd),
             // `/load <path>` loads a file's lines into the buffer and enters
             // `Laat` with the first line highlighted (sprint 007, FR-028).
             Dispatch::Command(SlashCommand::Load(path)) => self.run_load(&path),
@@ -1040,7 +1040,7 @@ impl App {
     }
 
     /// The most recent sealed, non-synthetic block's stored output — the
-    /// "previous buffer" that `/save` and `/filter` act on (sprint 007,
+    /// "previous buffer" that `/save` and `/pipe` act on (sprint 007,
     /// FR-021/FR-024/FR-025). `None` when no real command output is retained.
     fn previous_block_text(&self) -> Option<String> {
         self.store
@@ -1134,27 +1134,27 @@ impl App {
         });
     }
 
-    /// Handle `/filter <cmd>` (FR-025…FR-027): write the previous block's output
+    /// Handle `/pipe <cmd>` (FR-025…FR-027): write the previous block's output
     /// to a temp file and submit `cat <temp> | <cmd>` to the shell as a normal
-    /// block titled `{leader}filter <cmd>`, so it chains as the new previous
+    /// block titled `{leader}pipe <cmd>`, so it chains as the new previous
     /// output. A non-zero exit is surfaced when the block completes.
-    fn run_filter(&mut self, cmd: &str) {
+    fn run_pipe(&mut self, cmd: &str) {
         if cmd.is_empty() {
-            self.notice = Some("'/filter' requires a command".into());
+            self.notice = Some("'/pipe' requires a command".into());
             return;
         }
         let Some(text) = self.previous_block_text() else {
             self.notice = Some("previous buffer not found".into());
             return;
         };
-        let path = filter_temp_path();
+        let path = pipe_temp_path();
         if let Err(err) = std::fs::write(&path, text.as_bytes()) {
-            self.notice = Some(format!("filter failed: {err}"));
+            self.notice = Some(format!("pipe failed: {err}"));
             return;
         }
-        let label = format!("{}filter {}", self.config.leader_char, cmd);
+        let label = format!("{}pipe {}", self.config.leader_char, cmd);
         let command = format!("cat {} | {}", shell_single_quote(&path), cmd);
-        self.filter_active = true;
+        self.pipe_active = true;
         self.run_shell_labeled(label, command);
     }
 
@@ -1227,8 +1227,8 @@ impl App {
     }
 
     /// Run `command` in the shell while showing `label` as the block's title.
-    /// `/filter` uses this to run a composed `cat <temp> | <cmd>` pipeline while
-    /// the transcript shows the friendly `{leader}filter <cmd>` (sprint 007).
+    /// `/pipe` uses this to run a composed `cat <temp> | <cmd>` pipeline while
+    /// the transcript shows the friendly `{leader}pipe <cmd>` (sprint 007).
     fn run_shell_labeled(&mut self, label: String, command: String) {
         let id = self.transcript.begin_block(label.clone());
         self.current_block = Some(id);
@@ -1243,7 +1243,7 @@ impl App {
     /// into the emulator grid so it appears inline with shell output — and thus
     /// scrolls, selects, and copies identically (D25, option 2). It is also
     /// recorded as a closed, `synthetic` block so later features (`/save`,
-    /// `/filter`) can distinguish it from a typed command.
+    /// `/pipe`) can distinguish it from a typed command.
     fn synthetic_block(&mut self, command: String, output: &str) {
         // 1. Paint it into the grid. The prompt echo wears kapollo's prompt
         //    glyph so it reads like a command the user ran.
@@ -1277,20 +1277,20 @@ impl App {
     }
 }
 
-/// A unique temp-file path under the system temp dir for a `/filter` payload
+/// A unique temp-file path under the system temp dir for a `/pipe` payload
 /// (sprint 007). Combines the process id with a per-process counter so back-to-
-/// back filters never collide.
-fn filter_temp_path() -> std::path::PathBuf {
+/// back pipes never collide.
+fn pipe_temp_path() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("kapollo-filter-{}-{}.txt", std::process::id(), n));
+    path.push(format!("kapollo-pipe-{}-{}.txt", std::process::id(), n));
     path
 }
 
 /// Single-quote a path for safe inclusion in a shell command line, escaping any
-/// embedded single quotes (sprint 007 `/filter`).
+/// embedded single quotes (sprint 007 `/pipe`).
 fn shell_single_quote(path: &std::path::Path) -> String {
     let s = path.to_string_lossy();
     format!("'{}'", s.replace('\'', "'\\''"))

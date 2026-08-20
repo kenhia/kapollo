@@ -1,9 +1,14 @@
 //! Slash-command dispatch tests for the sprint-007 argument-bearing commands
-//! `/save`, `/filter`, and `/load` (contracts/slash-commands.md §6). The pure,
+//! `/save`, `/pipe`, and `/load` (contracts/slash-commands.md §6). The pure,
 //! unit-testable surface is the dispatch parsing and payload preservation
-//! (S1/S5/S8); the save-content/overwrite-prompt and the `/filter` shell
+//! (S1/S5/S8); the save-content/overwrite-prompt and the `/pipe` shell
 //! round-trip (S2–S4/S6/S7) are validated via the quickstart manual exception
-//! (Constitution III, live-TTY behavior).
+//! (live-TTY behavior).
+//!
+//! `/pipe` was named `/filter` through sprint 008 and hard-renamed in sprint 009
+//! (korg #1463) — it pipes one block's output through a command, it does not
+//! filter the transcript, and the old name cost a verification pass a wrong
+//! call. No alias was kept; `filter_is_no_longer_a_command` pins that.
 
 use kapollo::slash::{dispatch, Dispatch, SlashCommand};
 
@@ -28,21 +33,34 @@ fn save_with_path_carries_the_trimmed_path() {
 }
 
 #[test]
-fn s5_filter_preserves_the_raw_payload_with_pipes() {
-    // The `/filter` payload is the raw remainder so the shell sees pipes,
+fn s5_pipe_preserves_the_raw_payload_with_pipes() {
+    // The `/pipe` payload is the raw remainder so the shell sees pipes,
     // globs, and aliases intact (FR-025).
     assert_eq!(
-        dispatch("filter rg foo | sort"),
-        Dispatch::Command(SlashCommand::Filter("rg foo | sort".to_string()))
+        dispatch("pipe rg foo | sort"),
+        Dispatch::Command(SlashCommand::Pipe("rg foo | sort".to_string()))
     );
 }
 
 #[test]
-fn filter_without_arg_dispatches_empty_payload() {
+fn pipe_without_arg_dispatches_empty_payload() {
     assert_eq!(
-        dispatch("filter"),
-        Dispatch::Command(SlashCommand::Filter(String::new()))
+        dispatch("pipe"),
+        Dispatch::Command(SlashCommand::Pipe(String::new()))
     );
+}
+
+#[test]
+fn filter_is_no_longer_a_command() {
+    // Sprint 009 hard-renamed `/filter` to `/pipe` with no alias kept (korg
+    // #1463), unlike `/quit`|`/exit`. The old name must fall through to the
+    // unknown-command path so `/help` is suggested, rather than silently
+    // keeping the misnomer alive.
+    assert_eq!(
+        dispatch("filter rg foo"),
+        Dispatch::Unknown("filter".to_string())
+    );
+    assert_eq!(dispatch("filter"), Dispatch::Unknown("filter".to_string()));
 }
 
 #[test]

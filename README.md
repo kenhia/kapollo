@@ -65,7 +65,7 @@ _kapollo running in Windows Terminal, fish shell, "Line at a Time" mode._
   command, a divider rule above the input, and a fixed status bar showing a mode
   field, the cwd (following `cd`), transient messages, and the last exit code.
 - **Slash commands** — `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
-  `/save`, `/filter`, `/load`, `/quit` (and `/exit`), with a `//` escape for a
+  `/save`, `/pipe`, `/load`, `/quit` (and `/exit`), with a `//` escape for a
   literal leader.
 - **Safe by default** — Ctrl-C interrupts the running command (not kapollo); the
   terminal is always restored on exit, error, and panic.
@@ -134,7 +134,7 @@ config table; `/reload-config` re-reads the config without restarting and
 list of every action and [docs/usage.md](docs/usage.md) for the syntax.
 
 Slash commands: `/help`, `/clear`, `/status`, `/keys`, `/reload-config`,
-`/save`, `/filter`, `/load`, `/quit` (alias `/exit`).
+`/save`, `/pipe`, `/load`, `/quit` (alias `/exit`).
 See [docs/usage.md](docs/usage.md) for the configuration schema and full details.
 
 ## Documentation

@@ -152,7 +152,7 @@ literal leading leader char to the shell.
 | `/keys` | List the active key bindings (the live, effective keymap) |
 | `/reload-config` | Re-read the config file without restarting; applies keymap and other changes, keeping your in-progress input |
 | `/save <file>` | Write the previous command's exact output to a file (relative to the cwd, with `~` expansion); prompts `[O]verwrite, [A]ppend, [C]ancel` if the file exists |
-| `/filter <cmd>` | Pipe the previous command's output through `<cmd>` via the shell (pipes/aliases work); the result becomes the new previous output, so `/filter` chains |
+| `/pipe <cmd>` | Pipe the previous command's output through `<cmd>` via the shell (pipes/aliases work); the result becomes the new previous output, so `/pipe` chains. Named `/filter` before sprint 009; there is no alias |
 | `/load <file>` | Load a file's lines into the input buffer (one command per line) and enter `1T` with the first line highlighted |
 | `/quit` | Exit kapollo, restoring the terminal cleanly |
 | `/exit` | Alias for `/quit` |

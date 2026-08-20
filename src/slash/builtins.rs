@@ -14,7 +14,7 @@ pub fn help_text(leader: char) -> String {
          \x20 {leader}keys     List the active key bindings.\n\
          \x20 {leader}reload-config  Re-read the config file (keymap included).\n\
          \x20 {leader}save <file>    Save the previous command's output to a file.\n\
-         \x20 {leader}filter <cmd>   Pipe the previous output through <cmd>.\n\
+         \x20 {leader}pipe <cmd>     Pipe the previous output through <cmd>.\n\
          \x20 {leader}load <file>    Load a file's lines into the input (LAAT).\n\
          \x20 {leader}quit     Exit kapollo and restore the terminal.\n\
          \x20 {leader}exit     Alias for {leader}quit.\n\
@@ -56,7 +56,7 @@ mod tests {
     fn help_text_mentions_sprint_007_commands() {
         let text = help_text('/');
         assert!(text.contains("/save"));
-        assert!(text.contains("/filter"));
+        assert!(text.contains("/pipe"));
         assert!(text.contains("/load"));
     }
 

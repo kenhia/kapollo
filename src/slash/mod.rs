@@ -23,9 +23,10 @@ pub enum SlashCommand {
     /// `/save <path>` — write the previous block's output to a file (sprint 007,
     /// FR-021). The payload is the trimmed path (empty when omitted).
     Save(String),
-    /// `/filter <cmd>` — pipe the previous block's output through `<cmd>` via the
-    /// shell (sprint 007, FR-025). The payload is the raw remainder (pipes kept).
-    Filter(String),
+    /// `/pipe <cmd>` — pipe the previous block's output through `<cmd>` via the
+    /// shell (sprint 007, FR-025; renamed from `/filter` in sprint 009). The
+    /// payload is the raw remainder (pipes kept).
+    Pipe(String),
     /// `/load <path>` — load a file's lines into the input buffer and enter
     /// `Laat` (sprint 007, FR-028). The payload is the trimmed path.
     Load(String),
@@ -42,7 +43,7 @@ pub enum Dispatch {
 
 /// Dispatch a slash-command string (without the leader char). Matching is
 /// exact and case-sensitive for the MVP (D6). The argument-bearing commands
-/// (`save`/`filter`/`load`, sprint 007) take the trimmed remainder as payload;
+/// (`save`/`pipe`/`load`, sprint 007) take the trimmed remainder as payload;
 /// argument-less commands still require an exact match. Unknown commands yield
 /// [`Dispatch::Unknown`] so the caller can render an error block suggesting
 /// `/help`.
@@ -56,7 +57,7 @@ pub fn dispatch(command: &str) -> Dispatch {
     };
     match verb {
         "save" => return Dispatch::Command(SlashCommand::Save(rest.to_string())),
-        "filter" => return Dispatch::Command(SlashCommand::Filter(rest.to_string())),
+        "pipe" => return Dispatch::Command(SlashCommand::Pipe(rest.to_string())),
         "load" => return Dispatch::Command(SlashCommand::Load(rest.to_string())),
         _ => {}
     }
