@@ -132,6 +132,19 @@ impl Grid {
         self.advance_bytes(b"\x1b[H\x1b[2J\x1b[3J");
     }
 
+    /// Semi-clear (kwi #42): scroll the viewport's content up into scrollback
+    /// and home the cursor, WITHOUT erasing scrollback, so PageUp/wheel still
+    /// reveal it. Uses `ESC[nS` (scroll up) because `wezterm-term` pushes rows
+    /// scrolled out of a top-anchored full-width region into scrollback,
+    /// whereas `ESC[2J` erases the viewport rows in place and would lose them.
+    /// Scrolls by cursor row + 1 so only rows that can hold content move into
+    /// history (no trailing blank rows).
+    pub fn clear_viewport(&mut self) {
+        let (_, cursor_row) = self.cursor();
+        let rows = cursor_row as usize + 1;
+        self.advance_bytes(format!("\x1b[{rows}S\x1b[H").as_bytes());
+    }
+
     /// Current viewport dimensions (`rows`, `cols`).
     pub fn size(&self) -> (u16, u16) {
         (self.rows, self.cols)
@@ -314,6 +327,29 @@ mod tests {
         assert_eq!(grid.max_scroll(), 0);
         assert_eq!(cell_text(&grid, 0, 0), "");
         assert_eq!(grid.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn clear_viewport_preserves_scrollback_and_homes_cursor() {
+        // kwi #42: the semi-clear behind Ctrl-L. Prior output must remain
+        // reachable by scrolling up; the viewport goes blank; the cursor homes.
+        let mut grid = Grid::new(4, 80);
+        for i in 0..6 {
+            grid.advance_bytes(format!("line{i}\r\n").as_bytes());
+        }
+        let history_before = grid.max_scroll();
+
+        grid.clear_viewport();
+
+        assert!(
+            grid.max_scroll() > history_before,
+            "viewport content moved into scrollback"
+        );
+        assert_eq!(cell_text(&grid, 0, 0), "", "viewport is blank");
+        assert_eq!(grid.cursor(), (0, 0), "cursor homed");
+        // The most recent content line is reachable by scrolling up: two rows
+        // above the viewport (the blank cursor row scrolled away with it).
+        assert_eq!(cell_text(&grid, 2, 0), "line5");
     }
 
     #[test]

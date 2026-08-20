@@ -720,7 +720,20 @@ impl App {
             Action::ToggleMultLaat => self.toggle_mult_laat(),
             // Push the input buffer for an ad-hoc command (sprint 007, FR-018).
             Action::PushInput => self.push_input(),
+            // Ctrl-L semi-clear (sprint 010, kwi #42).
+            Action::SemiClear => self.semi_clear(),
         }
+    }
+
+    /// Semi-clear (kwi #42): scroll the visible pane into scrollback and blank
+    /// the viewport, keeping history reachable via PageUp/wheel — the Ctrl-L
+    /// convention, in contrast to `/clear`'s full reset. A view-side operation:
+    /// the wrapped shell is not informed, exactly like grid-injected synthetic
+    /// blocks. While a full-screen child owns the screen this never runs — the
+    /// event loop forwards keys to the child instead.
+    fn semi_clear(&mut self) {
+        self.grid.clear_viewport();
+        self.transcript.set_scroll_offset(0);
     }
 
     /// Handle an `Esc` press (FR-029). The first `Esc` cancels an active

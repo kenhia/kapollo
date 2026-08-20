@@ -56,3 +56,7 @@ toggle_mult_laat = "Ctrl+1"
 
 # Push/pop the input buffer to run an ad-hoc command (sprint 007).
 push_input = "Ctrl+Alt+Enter"
+
+# Semi-clear (sprint 010): scroll the visible pane into scrollback and blank
+# the viewport, keeping history reachable — unlike /clear, the full reset.
+semi_clear = "Ctrl+L"

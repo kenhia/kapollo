@@ -54,6 +54,9 @@ pub enum Action {
     // Input modes (sprint 007): toggle Mult/LAAT, and push/pop the input buffer.
     ToggleMultLaat,
     PushInput,
+    // Semi-clear (sprint 010, kwi #42): scroll the visible pane into scrollback
+    // and blank the viewport, keeping history reachable (unlike `/clear`).
+    SemiClear,
 }
 
 impl Action {
@@ -85,6 +88,7 @@ impl Action {
             Action::MultilineMoveEndBuffer => "multiline_move_end_buffer",
             Action::ToggleMultLaat => "toggle_mult_laat",
             Action::PushInput => "push_input",
+            Action::SemiClear => "semi_clear",
         }
     }
 
@@ -117,6 +121,7 @@ impl Action {
             Action::MultilineMoveEndBuffer,
             Action::ToggleMultLaat,
             Action::PushInput,
+            Action::SemiClear,
         ];
         ALL.iter().copied().find(|a| a.name() == name)
     }
@@ -514,6 +519,14 @@ impl Keymap {
             Binding::single(KeySpec::Single(KeyChord::new(
                 KeyCode::Enter,
                 KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ))),
+        ));
+        // Semi-clear with the conventional Ctrl+L (sprint 010, kwi #42).
+        bindings.push((
+            Action::SemiClear,
+            Binding::single(KeySpec::Single(KeyChord::new(
+                KeyCode::Char('l'),
+                KeyModifiers::CONTROL,
             ))),
         ));
         let map = Keymap { bindings };

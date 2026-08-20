@@ -63,6 +63,7 @@ transcript: starting a selection in one clears the other.
 | **PageUp** / **PageDown** | Scroll a page at a time (keeping `scroll.context_lines` of overlap) |
 | **Shift+PageUp** / **Shift+PageDown** | Scroll one line at a time |
 | **Shift+Home** / **Shift+End** | Jump to the oldest / newest output |
+| **Ctrl+L** | Semi-clear: blank the visible pane, keeping scrollback (unlike `/clear`) |
 
 `Shift+Enter` requires a terminal that supports the Kitty keyboard protocol;
 `Alt+Enter` is the universal fallback for inserting a newline.
@@ -147,7 +148,7 @@ literal leading leader char to the shell.
 | Command | Action |
 |---------|--------|
 | `/help` | Show available slash commands |
-| `/clear` | Clear the visible transcript |
+| `/clear` | Full reset: clear the transcript **and** its scrollback (Ctrl+L keeps scrollback) |
 | `/status` | Toggle the fixed status bar on or off |
 | `/keys` | List the active key bindings (the live, effective keymap) |
 | `/reload-config` | Re-read the config file without restarting; applies keymap and other changes, keeping your in-progress input |
