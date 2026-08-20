@@ -2,8 +2,8 @@
 
 > Status: **DRAFT** for review. Derived from
 > [sprints/planning/brainstorm.md](../sprints/planning/brainstorm.md) decisions
-> D1–D30. This is the authoritative technical reference per Constitution
-> Principle II (Architecture First). Update during each spec's polish phase.
+> D1–D30. This is the authoritative technical reference. Update it in the
+> same sprint as any change it describes.
 
 Last updated: 2026-06-04 (grid rework 004: terminal-grid model via `wezterm-term`,
 mouse selection/copy/scroll, block store with retained text — reverses D4, see §8)
@@ -35,7 +35,7 @@ terminal via **passthrough**.
   cells with scrollback, so in-place redraws, inline color, and mouse selection
   work natively. Alt-screen apps are still handed to the host via mouse/keyboard
   routing (§4, §13). See §13 for the grid architecture.
-- **TUI integrity** (Constitution VI): logs never touch the screen; panics
+- **TUI integrity**: logs never touch the screen; panics
   are caught at the event-loop boundary; terminal state is always restored.
 
 ## 2. Layered Architecture
@@ -131,7 +131,7 @@ terminal via **passthrough**.
 - **App / Event Loop** — Owns `State`, wires the layers, runs the main
   select loop (input events ⨉ PTY output ⨉ child-exit ⨉ ticks), and is the
   **panic boundary**: a panic is caught, the terminal is restored, and the
-  error is logged + surfaced (Constitution VI).
+  error is logged to the file sink (never the screen) + surfaced.
 - **Config & Persistence** — Loads `~/.config/kapollo/config.toml` (D15);
   provides typed config to all layers. Future: history DB and AI sections
   live here without bloating the base file.
@@ -353,7 +353,7 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
   which keeps the door open, but Windows PTY (ConPTY) and shell-hook
   differences are deferred problems.
 
-## 10. Observability & Failure (Constitution VI)
+## 10. Observability & Failure
 
 - **Logging**: `tracing` to a file sink under the XDG state/cache dir;
   default quiet; `--verbose`/`KAPOLLO_LOG` opt-in. Never write logs to the
@@ -556,4 +556,4 @@ state lives in `src/input/mod.rs` (pure pieces) and is wired in `src/app.rs`.
   `{leader}pipe <cmd>`, so it chains as the new previous output. `/load` reads
   a file's lines into the buffer and enters `Laat` with line 0 highlighted.
   Filesystem operations are system-boundary ops: errors surface as status
-  messages, never panics (Constitution VII).
+  messages, never panics.

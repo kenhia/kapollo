@@ -1,8 +1,8 @@
 //! T058 parity check: run an identical command sequence under fish and bash
 //! through the full PTY -> OutputProcessor -> Transcript pipeline, and confirm
 //! blocks, captured output, exit codes, and shell-state persistence match
-//! (SC-009). This is a live-shell integration test (Constitution III
-//! documented exception).
+//! (SC-009). This is a live-shell integration test — real-shell behavior
+//! cannot be unit-tested in isolation.
 
 use std::time::{Duration, Instant};
 
@@ -100,8 +100,8 @@ fn parity_run(shell: &str) -> Vec<(String, Option<i32>)> {
 
 #[test]
 fn fish_and_bash_core_run_loop_match() {
-    // Live-shell integration test (Constitution III documented exception): it
-    // requires both shells on the host. Skip gracefully when one is missing
+    // Live-shell integration test: it requires both shells on the host.
+    // Skip gracefully when one is missing
     // (e.g. a contributor box without fish) rather than fail; CI installs fish
     // so the parity guarantee stays exercised there.
     for sh in ["/usr/bin/fish", "/usr/bin/bash"] {

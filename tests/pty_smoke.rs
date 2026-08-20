@@ -1,8 +1,8 @@
 //! Headless PTY smoke test (T017): spawn the real shell in a pseudo-terminal,
 //! run a command, and assert its output is captured (SC-001).
 //!
-//! This is an integration test against a live shell per the Constitution III
-//! documented exception for interactive terminal behavior (research R11).
+//! This is an integration test against a live shell (research R11):
+//! interactive terminal behavior cannot be unit-tested in isolation.
 
 use std::time::{Duration, Instant};
 

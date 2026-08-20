@@ -1,6 +1,7 @@
-//! File-sink logging via `tracing`. Logs never go to the TUI surface
-//! (Constitution VI, FR-030); they are written to a file under the XDG state
-//! directory. Default verbosity is quiet; `--verbose`/`KAPOLLO_LOG` raise it.
+//! File-sink logging via `tracing`. Logs never go to the TUI surface — anything
+//! written to the terminal would corrupt it (FR-030); they are written to a
+//! file under the XDG state directory. Default verbosity is quiet;
+//! `--verbose`/`KAPOLLO_LOG` raise it.
 
 use std::path::PathBuf;
 

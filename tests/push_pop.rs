@@ -1,7 +1,7 @@
 //! Push/pop input-stack tests (sprint 007, contracts/push-pop-stack.md §5). The
 //! one-item snapshot save/restore is pure and unit-testable here; the
-//! `Ctrl+Alt+Enter` keymap binding and the live round-trip use the Constitution
-//! III manual exception (quickstart). The local `push`/`pop` helpers mirror
+//! `Ctrl+Alt+Enter` keymap binding and the live round-trip are covered by the
+//! manual walkthrough (quickstart). The local `push`/`pop` helpers mirror
 //! `App::push_input`/`App::pop_input` so the snapshot semantics (including the
 //! one-item no-op guard) are exercised directly.
 

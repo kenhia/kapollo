@@ -1,6 +1,6 @@
 # kapollo Specification (Combined)
 
-> Authoritative combined specification per Constitution Principle I. This
+> Authoritative combined specification. This
 > document consolidates the MVP requirements for quick reference. The canonical
 > per-feature source is [sprints/001-mvp-repl/spec.md](../sprints/001-mvp-repl/spec.md);
 > the technical reference is [architecture.md](architecture.md).

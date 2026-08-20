@@ -2,8 +2,8 @@
 //! running command, not kapollo; the wrapped shell survives and keeps
 //! accepting input (FR-024, SC-004, SC-005).
 //!
-//! Integration test against a live shell per the Constitution III documented
-//! exception (research R11).
+//! Integration test against a live shell (research R11): PTY and signal
+//! behavior cannot be unit-tested in isolation.
 
 use std::thread::sleep;
 use std::time::{Duration, Instant};

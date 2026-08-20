@@ -1117,7 +1117,7 @@ impl App {
     }
 
     /// Write (or append) `bytes` to `path`, surfacing any filesystem error as a
-    /// status message rather than a panic (system boundary, Constitution VII).
+    /// status message rather than a panic (system-boundary error handling).
     fn write_save(&mut self, path: &std::path::Path, bytes: &[u8], append: bool) {
         use std::io::Write;
         let result = std::fs::OpenOptions::new()

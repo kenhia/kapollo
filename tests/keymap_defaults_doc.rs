@@ -1,6 +1,6 @@
 //! Example-config sync test (T032): `docs/keymap-defaults.toml` must rebuild the
 //! exact built-in default map, so the published reference can never drift from
-//! the code (Constitution III + V; FR-019). See
+//! the code (FR-019). See
 //! `sprints/006-keymap-engine/contracts/keymap-config.md`.
 
 use std::path::Path;
