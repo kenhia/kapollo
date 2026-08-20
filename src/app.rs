@@ -17,7 +17,7 @@ use crate::config::Config;
 use crate::grid::Grid;
 use crate::input::router::{self, MouseRoute, Routed};
 use crate::input::{InputHistory, InputMode, InputPad, LaatState};
-use crate::output::{Boundary, OutputProcessor};
+use crate::output::{BlockAssembler, Boundary, ClosedBlock, OutputProcessor, ProcessorEvent};
 use crate::pty::{PtyEvent, PtySession};
 use crate::selection::coords::{self, Cell};
 use crate::selection::{SelectionController, Trigger};
@@ -67,21 +67,23 @@ pub struct App {
     /// flag, never a wall clock (FR-026/FR-029, research R6).
     esc_pending: bool,
     processor: OutputProcessor,
-    current_block: Option<BlockId>,
+    /// The in-flight command FIFO: submissions push, the end mark closes the
+    /// front. A command submitted while another runs waits its turn instead of
+    /// stealing the running block's output or its end mark (kwi #34).
+    assembler: BlockAssembler,
     /// The canonical, retained block store — the source of truth for `/save`,
     /// `/pipe`, and block-aware copy. Survives grid scrollback eviction (R3).
     pub store: BlockStore,
-    /// The store block currently capturing output, paired with `current_block`.
-    current_store_block: Option<BlockId>,
     /// Whether a full-screen program currently owns the screen; while set, keys
     /// are encoded and forwarded to the child instead of editing the input pad.
     passthrough: bool,
     /// A pending `/save` overwrite prompt (sprint 007, FR-023): while set,
     /// `on_key` consumes the next key to resolve overwrite/append/cancel.
     pending_prompt: Option<PendingPrompt>,
-    /// True while a `/pipe` shell round-trip is in flight, so its completion
-    /// can surface a `pipe non-zero exit` status message (sprint 007, FR-027).
-    pipe_active: bool,
+    /// The store block of an in-flight `/pipe`, so exactly its completion — not
+    /// an earlier command's — surfaces the `pipe non-zero exit` status message
+    /// (sprint 007, FR-027).
+    pipe_block: Option<BlockId>,
     /// The one-item input push/pop stack (sprint 007, FR-018…FR-020): a pushed
     /// snapshot is restored on the next submit. `None` means the slot is empty.
     pushed: Option<crate::input::InputSnapshot>,
@@ -129,12 +131,11 @@ impl App {
             notice: None,
             esc_pending: false,
             processor,
-            current_block: None,
+            assembler: BlockAssembler::new(),
             store,
-            current_store_block: None,
             passthrough: false,
             pending_prompt: None,
-            pipe_active: false,
+            pipe_block: None,
             pushed: None,
             should_quit: false,
         })
@@ -209,48 +210,27 @@ impl App {
                 PtyEvent::Output(bytes) => {
                     drained_bytes += bytes.len();
                     drained_chunks += 1;
-                    // Side-tap: detect command/cwd/mode boundaries and capture
-                    // the block's output text for the store; the emulator, not
-                    // this pass, applies SGR/cursor moves (R7).
-                    let tx_block_before = self.current_block;
-                    let boundaries =
-                        self.processor
-                            .apply(&bytes, &mut self.transcript, &mut self.current_block);
-                    let mut output_started = false;
-                    let mut command_ended: Option<Option<i32>> = None;
-                    for boundary in boundaries {
-                        match boundary {
-                            Boundary::CommandEnd { exit_code } => {
-                                self.last_exit = exit_code;
-                                command_ended = Some(exit_code);
-                                // LAAT stepping: gate the highlight on the exit
-                                // code of the line just submitted (FR-004).
-                                self.apply_laat_gating(exit_code);
-                                // A completed `/pipe` round-trip surfaces a
-                                // non-zero exit as a status message (FR-027).
-                                if self.pipe_active {
-                                    self.pipe_active = false;
-                                    if exit_code.is_some_and(|c| c != 0) {
-                                        self.notice = Some("pipe non-zero exit".into());
-                                    }
-                                }
-                            }
-                            // The shell reported a new working directory via
-                            // OSC 7; follow it on the status rule (FR-019).
-                            Boundary::Cwd(path) => self.cwd = path,
-                            // Output start (OSC 133 `C`) anchors the store
-                            // block's first grid row and stamps `started_at`.
-                            Boundary::OutputStart => output_started = true,
-                            _ => {}
-                        }
-                    }
+                    // Side-tap: split the chunk into capture-gated output spans
+                    // and boundary marks (OSC 133/7 + modes), in stream order;
+                    // the emulator, not this pass, applies SGR/cursor moves (R7).
+                    let events = self.processor.process(&bytes);
                     // Feed the emulator the raw bytes verbatim; it owns the
                     // escape parse, in-place CR updates, and alt-screen state.
                     self.grid.advance_bytes(&bytes);
-                    // Anchor the store block's row range to the post-advance
-                    // grid cursor and, on the end mark, copy the captured text
-                    // into the canonical store and seal it (R3, R7).
-                    self.update_store(output_started, command_ended, tx_block_before);
+                    let row = self.cursor_stable_row();
+                    for event in events {
+                        // Block association first (the in-flight FIFO, kwi #34)…
+                        let closed = self.assembler.apply(
+                            &event,
+                            &mut self.transcript,
+                            &mut self.store,
+                            row,
+                        );
+                        // …then the app-level reactions to the same mark.
+                        if let ProcessorEvent::Boundary(boundary) = event {
+                            self.on_boundary(boundary, closed);
+                        }
+                    }
                     // Yield back to the event loop once the per-pass budget is
                     // reached so key input is not starved during a flood.
                     if drained_bytes >= MAX_DRAIN_BYTES || drained_chunks >= MAX_DRAIN_CHUNKS {
@@ -279,30 +259,32 @@ impl App {
         self.grid.stable_row_at(0, self.grid.cursor().1)
     }
 
-    /// Reflect a drain pass's boundary marks into the canonical store: anchor
-    /// the running block's start row on output start, and on the end mark copy
-    /// the captured text from the (now-closed) transcript block into the store
-    /// and seal it with its exit code and final row (R3, R7).
-    fn update_store(
-        &mut self,
-        output_started: bool,
-        command_ended: Option<Option<i32>>,
-        tx_block: Option<BlockId>,
-    ) {
-        let end_row = self.cursor_stable_row();
-        if output_started {
-            if let Some(sid) = self.current_store_block {
-                self.store.set_start_row(sid, end_row);
-            }
-        }
-        if let Some(exit_code) = command_ended {
-            if let Some(sid) = self.current_store_block.take() {
-                if let Some(text) = tx_block.and_then(|id| self.transcript.block(id)) {
-                    let captured = text.output.to_vec();
-                    self.store.push_output(sid, &captured);
+    /// App-level reaction to a boundary mark, after block association:
+    /// exit-code bookkeeping, LAAT gating, `/pipe` completion, and OSC 7 cwd
+    /// tracking. `closed` is the block the mark just sealed, if any.
+    fn on_boundary(&mut self, boundary: Boundary, closed: Option<ClosedBlock>) {
+        match boundary {
+            Boundary::CommandEnd { exit_code } => {
+                self.last_exit = exit_code;
+                // LAAT stepping: gate the highlight on the exit code of the
+                // line just submitted (FR-004).
+                self.apply_laat_gating(exit_code);
+                // A completed `/pipe` round-trip surfaces a non-zero exit as a
+                // status message — keyed to the pipe's own block so an earlier
+                // command finishing cannot consume it (FR-027).
+                if let Some(closed) = closed {
+                    if self.pipe_block == Some(closed.store) {
+                        self.pipe_block = None;
+                        if exit_code.is_some_and(|c| c != 0) {
+                            self.notice = Some("pipe non-zero exit".into());
+                        }
+                    }
                 }
-                self.store.seal(sid, exit_code, end_row);
             }
+            // The shell reported a new working directory via OSC 7; follow it
+            // on the status rule (FR-019).
+            Boundary::Cwd(path) => self.cwd = path,
+            _ => {}
         }
     }
 
@@ -1154,8 +1136,8 @@ impl App {
         }
         let label = format!("{}pipe {}", self.config.leader_char, cmd);
         let command = format!("cat {} | {}", shell_single_quote(&path), cmd);
-        self.pipe_active = true;
-        self.run_shell_labeled(label, command);
+        let store = self.run_shell_labeled(label, command);
+        self.pipe_block = Some(store);
     }
 
     /// Handle `/load <path>` (FR-028): read the file's lines into the input
@@ -1223,20 +1205,27 @@ impl App {
             let _ = self.shell.write_input(b"\n");
             return;
         }
-        self.run_shell_labeled(line.clone(), line);
+        let _ = self.run_shell_labeled(line.clone(), line);
     }
 
-    /// Run `command` in the shell while showing `label` as the block's title.
-    /// `/pipe` uses this to run a composed `cat <temp> | <cmd>` pipeline while
-    /// the transcript shows the friendly `{leader}pipe <cmd>` (sprint 007).
-    fn run_shell_labeled(&mut self, label: String, command: String) {
-        let id = self.transcript.begin_block(label.clone());
-        self.current_block = Some(id);
+    /// Run `command` in the shell while showing `label` as the block's title,
+    /// returning the canonical store block's id. `/pipe` uses this to run a
+    /// composed `cat <temp> | <cmd>` pipeline while the transcript shows the
+    /// friendly `{leader}pipe <cmd>` (sprint 007).
+    fn run_shell_labeled(&mut self, label: String, command: String) -> BlockId {
+        let tx = self.transcript.begin_block(label.clone());
         // Mirror the boundary in the canonical store (OSC 133 `B`); its row
         // range is anchored as output arrives (R3, R7).
-        self.current_store_block = Some(self.store.begin(label, Some(self.cwd.clone())));
-        self.processor.begin_command();
+        let store = self.store.begin(label, Some(self.cwd.clone()));
+        // Reset capture only when idle: a submit while a command is running
+        // must not stop that command's capture — the queued command's own
+        // capture opens at its `C` mark (kwi #34).
+        if self.assembler.is_idle() {
+            self.processor.begin_command();
+        }
+        self.assembler.begin(tx, store);
         let _ = self.shell.send_command(&command);
+        store
     }
 
     /// Render a kapollo-generated block (e.g. `/help`, errors) by injecting it

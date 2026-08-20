@@ -86,7 +86,12 @@ terminal via **passthrough**.
 - **Output Processor** — Parses the PTY byte stream with `vte`. Its jobs:
   (1) detect **OSC 133** prompt/command marks for block boundaries (D12);
   (2) detect **alt-screen** enter/leave (`?1049h`/`?1049l`) to trigger
-  passthrough; (3) emit output segments tagged with the current block;
+  passthrough; (3) emit an ordered event stream of capture-gated output
+  spans and boundary marks — block association is the **Block Assembler**'s
+  job: it keeps a FIFO of in-flight commands (submissions push, the end mark
+  closes the front and pops), so a command submitted while another is running
+  waits its turn instead of stealing the running block's output or its end
+  mark (kwi #34);
   (4) **normalize captured output to clean printable text** — `vte` swallows
   complete OSC/CSI/DCS escape sequences (so SGR styling and terminal
   query/responses never leak as text), and the performer keeps only `\n` and
@@ -164,6 +169,13 @@ DB (D13), and AI (D11).
         │
         └── (post-MVP) persist to history DB if enabled & not private
 ```
+
+A command submitted while another is still running does not disturb the
+running block: its blocks are queued at the back of the in-flight FIFO, the
+raw bytes go to the PTY immediately (the kernel buffers them; the shell reads
+them at its next prompt, exactly as in a real terminal), and its own capture
+opens at its `C` mark after the running command's `D` closes the front of the
+queue (kwi #34).
 
 ### Block boundary detection (D12)
 1. **Primary — OSC 133 semantic prompt marks.** kapollo installs (or asks

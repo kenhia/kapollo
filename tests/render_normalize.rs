@@ -4,23 +4,28 @@
 //! FR-004).
 
 use kapollo::config::Caps;
-use kapollo::output::OutputProcessor;
-use kapollo::session::Transcript;
+use kapollo::output::{BlockAssembler, OutputProcessor};
+use kapollo::session::{BlockStore, Transcript};
 
 /// Capture the normalized output of a single OSC 133-delimited block.
 fn capture(payload: &[u8]) -> String {
     let mut transcript = Transcript::new(Caps::default());
+    let mut store = BlockStore::new(&Caps::default());
+    let mut assembler = BlockAssembler::new();
     let id = transcript.begin_block("cmd".to_string());
-    let mut current = Some(id);
+    let sid = store.begin("cmd".to_string(), None);
 
     let mut processor = OutputProcessor::osc133();
     processor.begin_command();
+    assembler.begin(id, sid);
 
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"\x1b]133;C\x07");
     bytes.extend_from_slice(payload);
     bytes.extend_from_slice(b"\x1b]133;D;0\x07");
-    processor.apply(&bytes, &mut transcript, &mut current);
+    for event in processor.process(&bytes) {
+        assembler.apply(&event, &mut transcript, &mut store, 0);
+    }
 
     transcript.blocks()[0].output_lossy()
 }

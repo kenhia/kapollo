@@ -4,15 +4,18 @@
 
 use std::path::PathBuf;
 
-use kapollo::config::Caps;
-use kapollo::output::{Boundary, OutputProcessor};
-use kapollo::session::Transcript;
+use kapollo::output::{Boundary, OutputProcessor, ProcessorEvent};
 
 fn apply(payload: &[u8]) -> Vec<Boundary> {
     let mut processor = OutputProcessor::osc133();
-    let mut tx = Transcript::new(Caps::default());
-    let mut current = None;
-    processor.apply(payload, &mut tx, &mut current)
+    processor
+        .process(payload)
+        .into_iter()
+        .filter_map(|e| match e {
+            ProcessorEvent::Boundary(b) => Some(b),
+            ProcessorEvent::Output(_) => None,
+        })
+        .collect()
 }
 
 #[test]
