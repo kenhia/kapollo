@@ -1,7 +1,7 @@
 //! Input-pad selection: a character-anchored range within the input buffer
 //! (sprint 005, US1; FR-003/FR-004). At most one selection is active in the pad
 //! at a time; cross-pad arbitration (input vs. transcript) is handled by the app
-//! (US5). See `specs/005-input-and-status/contracts/input-editing.md` §3.
+//! (US5). See `sprints/005-input-and-status/contracts/input-editing.md` §3.
 
 /// A character-anchored selection range within the input buffer. `anchor` is the
 /// fixed end (where the selection began); `caret` tracks the moving end and

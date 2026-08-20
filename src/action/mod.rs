@@ -9,7 +9,7 @@
 //! NOT resolved here. [`Action::ClearStatusMessage`] is a named action listed by
 //! `/keys` but, being the contextual `Esc Esc` gesture, has no [`KeyChord`].
 //!
-//! See `specs/005-input-and-status/contracts/input-editing.md` §4.
+//! See `sprints/005-input-and-status/contracts/input-editing.md` §4.
 
 use crossterm::event::{KeyCode, KeyModifiers};
 

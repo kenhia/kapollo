@@ -1,7 +1,7 @@
 //! Input-mode tests (sprint 007). The Foundational subset (C2/C3/C4) covers the
 //! `ToggleMultLaat` mode transitions and mode-aware caret motion that both P1
 //! stories build on; the US2 edge-recall cases (C1/C5/C6/C7/C8) live alongside.
-//! See `specs/007-laat-mode/contracts/input-modes.md` §4.
+//! See `sprints/007-laat-mode/contracts/input-modes.md` §4.
 
 use kapollo::input::{InputHistory, InputMode, InputPad};
 

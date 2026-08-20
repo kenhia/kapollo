@@ -1,6 +1,6 @@
 //! `[keymap]` config-surface tests (T010/T017): default identity, string and
 //! array bindings, primary/alternate, and unknown-action tolerance.
-//! See `specs/006-keymap-engine/contracts/keymap-config.md`.
+//! See `sprints/006-keymap-engine/contracts/keymap-config.md`.
 
 use std::path::Path;
 

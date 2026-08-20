@@ -2,7 +2,7 @@
 //!
 //! Proves the grid-model "feel": PTY-backed shell rendered as a styled grid, with
 //! content-coordinate mouse selection, scrollback, alt-screen handover, and explicit
-//! (never implicit) copy. Throwaway spike code — see `specs/003-grid-spike/`.
+//! (never implicit) copy. Throwaway spike code — see `sprints/003-grid-spike/`.
 //!
 //! ## Coordinate model (the interesting part)
 //!

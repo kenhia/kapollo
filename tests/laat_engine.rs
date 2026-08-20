@@ -2,7 +2,7 @@
 //! (L1–L6). The gating decision is a pure `LaatState` transition; the live
 //! highlight/flag rendering and the `Esc Esc` abort use the Constitution III
 //! manual exception (quickstart). See
-//! `specs/007-laat-mode/contracts/laat-engine.md` §6.
+//! `sprints/007-laat-mode/contracts/laat-engine.md` §6.
 
 use kapollo::input::{InputMode, LaatOutcome, LaatState};
 

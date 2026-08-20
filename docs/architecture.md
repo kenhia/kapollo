@@ -1,7 +1,7 @@
 # kapollo Architecture
 
 > Status: **DRAFT** for review. Derived from
-> [specs/planning/brainstorm.md](../specs/planning/brainstorm.md) decisions
+> [sprints/planning/brainstorm.md](../sprints/planning/brainstorm.md) decisions
 > D1–D30. This is the authoritative technical reference per Constitution
 > Principle II (Architecture First). Update during each spec's polish phase.
 
@@ -407,9 +407,9 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
 ## 13. Grid Architecture (sprint 004, `004-grid-rework`)
 
 > Records the architecture for the grid rework. Realizes D25–D30 and the 003
-> spike. Specs: [004-grid-rework/plan.md](../specs/004-grid-rework/plan.md),
-> [research.md](../specs/004-grid-rework/research.md),
-> [data-model.md](../specs/004-grid-rework/data-model.md).
+> spike. Specs: [004-grid-rework/plan.md](../sprints/004-grid-rework/plan.md),
+> [research.md](../sprints/004-grid-rework/research.md),
+> [data-model.md](../sprints/004-grid-rework/data-model.md).
 
 ### 13.1 Grid backend (D25/D27)
 kapollo embeds **`wezterm-term`** (git-pinned `rev =

@@ -1,7 +1,7 @@
 //! Key-string grammar tests (T004): case-insensitivity, modifier-order
 //! tolerance, short-modifier-names-only, unknown key/empty rejection, the
 //! `Esc Esc` chord, unsupported chords, and `display()` round-tripping.
-//! See `specs/006-keymap-engine/contracts/key-string.md`.
+//! See `sprints/006-keymap-engine/contracts/key-string.md`.
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use kapollo::action::{KeyChord, KeyParseReason, KeySpec};

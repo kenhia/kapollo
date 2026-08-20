@@ -15,3 +15,6 @@ flamegraph.svg
 *.swp
 *~
 .DS_Store
+
+# Harness
+.env

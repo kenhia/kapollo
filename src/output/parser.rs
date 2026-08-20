@@ -130,7 +130,7 @@ impl Perform for Performer<'_> {
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, c: char) {
-        if intermediates != [b'?'] || !matches!(c, 'h' | 'l') {
+        if intermediates != *b"?" || !matches!(c, 'h' | 'l') {
             return;
         }
         // A single CSI ? set/reset may carry several `;`-separated modes; emit a

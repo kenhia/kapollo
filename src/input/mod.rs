@@ -13,7 +13,7 @@ pub use selection::InputSelection;
 
 /// The editing mode of the input buffer, surfaced in the status bar's reserved
 /// 4-column mode field (sprint 007; see
-/// `specs/007-laat-mode/contracts/input-modes.md`).
+/// `sprints/007-laat-mode/contracts/input-modes.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputMode {
     /// Single-line / default editing; `Up`/`Down` recall history.
@@ -50,7 +50,7 @@ impl InputMode {
 }
 
 /// The advance/flag outcome of applying an exit code to a pending LAAT line
-/// (sprint 007; `specs/007-laat-mode/contracts/laat-engine.md` §3).
+/// (sprint 007; `sprints/007-laat-mode/contracts/laat-engine.md` §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LaatOutcome {
     /// Exit `0` (or no reported code): advance the highlight, clear the flag.
@@ -216,7 +216,7 @@ impl InputPad {
     /// Move the caret up one buffer line, preserving the visual column where the
     /// target line is long enough and clamping to its end otherwise. A no-op on
     /// the first line. Collapses any selection (sprint 007;
-    /// `specs/007-laat-mode/contracts/input-modes.md` §2).
+    /// `sprints/007-laat-mode/contracts/input-modes.md` §2).
     pub fn caret_line_up(&mut self) {
         self.selection = None;
         let (row, col) = self.cursor_row_col();
