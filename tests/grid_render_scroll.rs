@@ -1,7 +1,7 @@
 //! Scrollback-window + alt-screen contract tests (US1, T012): viewport windowing
 //! with top clamp, alt-screen enter/leave restoring the prior viewport, and
 //! single-row damage reporting, per
-//! `specs/004-grid-rework/contracts/grid-render.md` (FR-004/005, SC-003).
+//! `sprints/004-grid-rework/contracts/grid-render.md` (FR-004/005, SC-003).
 
 use kapollo::grid::render::rows_to_lines;
 use kapollo::grid::Grid;

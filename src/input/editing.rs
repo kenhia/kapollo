@@ -3,7 +3,7 @@
 //! rule). These operate on a slice of `char`s so they are unit-testable in
 //! isolation and reused by `InputPad` (sprint 005, US1; FR-002/006/007).
 //!
-//! See `specs/005-input-and-status/contracts/input-editing.md`.
+//! See `sprints/005-input-and-status/contracts/input-editing.md`.
 
 /// Character classes used by punctuation-aware word motion (FR-002).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

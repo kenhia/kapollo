@@ -1,7 +1,7 @@
 //! `spike-support` — shared, crate-agnostic plumbing and the unit-tested pure helpers
 //! reused by all three terminal-grid spike stages (S1 `vt100`, S2 `alacritty_terminal`,
 //! S3 `wezterm-term`). Keeping this thin and identical across stages is what makes the
-//! scorecard comparison fair (see `specs/003-grid-spike/`).
+//! scorecard comparison fair (see `sprints/003-grid-spike/`).
 
 pub mod clipboard;
 pub mod coords;

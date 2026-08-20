@@ -1,5 +1,5 @@
 //! Grid-render contract tests (US1, T011): in-place CR, SGR→ratatui style, and
-//! wide-cell handling, per `specs/004-grid-rework/contracts/grid-render.md`
+//! wide-cell handling, per `sprints/004-grid-rework/contracts/grid-render.md`
 //! (FR-002/003, SC-002).
 
 use kapollo::grid::render::{row_to_line, rows_to_lines};

@@ -1,7 +1,7 @@
 //! Keymap engine tests (T009/T016): the default map reproduces the legacy
 //! bindings, the copy variants and the newline primary/alternate are bound,
 //! overrides rebind, and per-mode maps inherit the default.
-//! See `specs/006-keymap-engine/contracts/keymap-engine.md`.
+//! See `sprints/006-keymap-engine/contracts/keymap-engine.md`.
 
 use std::collections::BTreeMap;
 

@@ -111,7 +111,7 @@ a configurable clear-on-submit toggle, but it does not move the recommendation.
 
 ## Feeds into
 
-- Decisions D25–D30 (see [02-rework-vs-rewrite.md](../../specs/planning/grid-pivot/02-rework-vs-rewrite.md)):
+- Decisions D25–D30 (see [02-rework-vs-rewrite.md](../../sprints/planning/grid-pivot/02-rework-vs-rewrite.md)):
   the spike confirms an **in-place rework is viable** — the selection + alt-screen model
   drops onto a real emulator grid without a rewrite — and supplies the crate choice
   (`wezterm-term`, fallback `alacritty_terminal`) those decisions were waiting on (FR-027).

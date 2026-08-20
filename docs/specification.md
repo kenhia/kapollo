@@ -2,7 +2,7 @@
 
 > Authoritative combined specification per Constitution Principle I. This
 > document consolidates the MVP requirements for quick reference. The canonical
-> per-feature source is [specs/001-mvp-repl/spec.md](../specs/001-mvp-repl/spec.md);
+> per-feature source is [sprints/001-mvp-repl/spec.md](../sprints/001-mvp-repl/spec.md);
 > the technical reference is [architecture.md](architecture.md).
 
 Last updated: 2026-06-04 (grid rework 004: native terminal grid via

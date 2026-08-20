@@ -60,5 +60,5 @@ the rework spec.
 
 ## References
 
-- Feature spec: [../specs/003-grid-spike/spec.md](../specs/003-grid-spike/spec.md)
-- Spike plan: [../specs/planning/grid-pivot/03-spike-plan.md](../specs/planning/grid-pivot/03-spike-plan.md)
+- Feature spec: [../sprints/003-grid-spike/spec.md](../sprints/003-grid-spike/spec.md)
+- Spike plan: [../sprints/planning/grid-pivot/03-spike-plan.md](../sprints/planning/grid-pivot/03-spike-plan.md)
