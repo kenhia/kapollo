@@ -21,6 +21,10 @@ const DEFAULT_PROMPT_COLOR: Color = Color::Red;
 const DEFAULT_INPUT_PROMPT: bool = true;
 // The input-pad prompt glyph wears this color while a command runs (kwi #35).
 const DEFAULT_RUNNING_COLOR: Color = Color::Yellow;
+// Multiline-submit whitespace handling (kwi #46): by default only the trailing
+// run of whitespace-only lines is stripped (the sprint-005 T034 behavior).
+const DEFAULT_SUPPRESS_MULTILINE_WHITESPACE: bool = false;
+const DEFAULT_SUPPRESS_MULTILINE_TRAILING: bool = true;
 const DEFAULT_PER_BLOCK_BYTES: u64 = 1024 * 1024; // 1 MiB
 const DEFAULT_PER_BLOCK_LINES: u64 = 50_000;
 const DEFAULT_TRANSCRIPT_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
@@ -49,6 +53,8 @@ const TOP_LEVEL_KEYS: &[&str] = &[
     "prompt_color",
     "input_prompt",
     "running_color",
+    "suppress_multiline_whitespace",
+    "suppress_multiline_trailing_whitespace_lines",
     "caps",
     "mouse",
     "clipboard",
@@ -87,6 +93,12 @@ pub struct Config {
     /// Color the input-pad prompt glyph wears while a command is running
     /// (default yellow; kwi #35). Honors `NO_COLOR` like `prompt_color`.
     pub running_color: Color,
+    /// Suppress ALL whitespace-only lines (interior included) from a multiline
+    /// submission (default false; kwi #46). Overrides the trailing-only knob.
+    pub suppress_multiline_whitespace: bool,
+    /// Suppress the trailing run of whitespace-only lines from a multiline
+    /// submission (default true — the shipped sprint-005 behavior; kwi #46).
+    pub suppress_multiline_trailing_whitespace_lines: bool,
     /// Output retention caps.
     pub caps: Caps,
     /// Mouse capture / selection behavior (sprint 004, D28).
@@ -168,6 +180,8 @@ impl Default for Config {
             prompt_color: DEFAULT_PROMPT_COLOR,
             input_prompt: DEFAULT_INPUT_PROMPT,
             running_color: DEFAULT_RUNNING_COLOR,
+            suppress_multiline_whitespace: DEFAULT_SUPPRESS_MULTILINE_WHITESPACE,
+            suppress_multiline_trailing_whitespace_lines: DEFAULT_SUPPRESS_MULTILINE_TRAILING,
             caps: Caps::default(),
             mouse: Mouse::default(),
             clipboard: Clipboard::default(),
@@ -288,6 +302,8 @@ struct RawConfig {
     prompt_color: Option<String>,
     input_prompt: Option<bool>,
     running_color: Option<String>,
+    suppress_multiline_whitespace: Option<bool>,
+    suppress_multiline_trailing_whitespace_lines: Option<bool>,
     caps: Option<RawCaps>,
     mouse: Option<RawMouse>,
     clipboard: Option<RawClipboard>,
@@ -417,6 +433,12 @@ impl RawConfig {
             prompt_color,
             input_prompt: self.input_prompt.unwrap_or(DEFAULT_INPUT_PROMPT),
             running_color,
+            suppress_multiline_whitespace: self
+                .suppress_multiline_whitespace
+                .unwrap_or(DEFAULT_SUPPRESS_MULTILINE_WHITESPACE),
+            suppress_multiline_trailing_whitespace_lines: self
+                .suppress_multiline_trailing_whitespace_lines
+                .unwrap_or(DEFAULT_SUPPRESS_MULTILINE_TRAILING),
             caps,
             mouse: {
                 let raw = self.mouse.unwrap_or_default();

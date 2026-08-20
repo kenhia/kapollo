@@ -949,7 +949,12 @@ impl App {
         }
 
         // Norm / Mult: submit the whole buffer as one unit, clearing the pad.
-        let line = self.input.take_submit();
+        // Whitespace-only lines are suppressed per the config policy (kwi #46).
+        let suppression = crate::input::WhitespaceSuppression::from_flags(
+            self.config.suppress_multiline_whitespace,
+            self.config.suppress_multiline_trailing_whitespace_lines,
+        );
+        let line = self.input.take_submit(suppression);
         self.run_submission(line);
         // Submitting a `Mult` buffer returns to `Norm` (FR-014).
         if self.mode == InputMode::Mult {

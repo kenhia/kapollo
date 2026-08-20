@@ -28,7 +28,9 @@ Run `/keys` at any time for the live, authoritative list of bindings.
 
 On submit, trailing blank (whitespace-only) lines of a multiline buffer are
 dropped so a stray empty last line does not run an extra command; interior blank
-lines are preserved and single-line input is never altered.
+lines are preserved and single-line input is never altered. Both behaviors are
+configurable — see `suppress_multiline_whitespace` and
+`suppress_multiline_trailing_whitespace_lines` under Configuration.
 
 ### Cursor motion & line editing (input pad)
 
@@ -228,6 +230,14 @@ input_prompt = true
 # "yellow"). Under NO_COLOR the status bar's "…" exit-slot marker carries the
 # running cue instead.
 running_color = "yellow"
+
+# Whitespace-only lines in a MULTILINE submission (single-line input is never
+# altered). By default only the trailing run of blank lines is stripped;
+# setting suppress_multiline_whitespace = true suppresses interior blank lines
+# too and overrides the trailing knob. Set both false to submit exactly what
+# you typed.
+suppress_multiline_whitespace = false
+suppress_multiline_trailing_whitespace_lines = true
 
 [caps]
 # Per-block output retention. Defaults: 1 MiB / 50000 lines.

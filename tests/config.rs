@@ -47,6 +47,22 @@ fn input_prompt_defaults_on_and_can_be_disabled() {
 }
 
 #[test]
+fn whitespace_suppression_knobs_default_to_trailing_only() {
+    // kwi #46: trailing-strip on, all-lines off, both configurable.
+    let d = Config::default();
+    assert!(!d.suppress_multiline_whitespace);
+    assert!(d.suppress_multiline_trailing_whitespace_lines);
+
+    let cfg = Config::from_toml(
+        "suppress_multiline_whitespace = true\nsuppress_multiline_trailing_whitespace_lines = false\n",
+        Path::new("test.toml"),
+    )
+    .expect("suppression knobs should parse");
+    assert!(cfg.suppress_multiline_whitespace);
+    assert!(!cfg.suppress_multiline_trailing_whitespace_lines);
+}
+
+#[test]
 fn running_color_defaults_yellow_and_parses_names() {
     // kwi #35: the input-pad prompt wears this color while a command runs.
     use ratatui::style::Color;

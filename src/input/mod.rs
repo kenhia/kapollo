@@ -464,15 +464,19 @@ impl InputPad {
         self.cursor += normalized.chars().count();
     }
 
-    /// Take the buffer contents for submission, leaving the pad empty. Trailing
-    /// whitespace-only lines of a multi-line buffer are stripped (interior
-    /// blanks are preserved; a single-line buffer is returned verbatim) so a
-    /// stray blank last line from editing or paste does not submit an extra
-    /// empty command (kwi #46; default behavior).
-    pub fn take_submit(&mut self) -> String {
+    /// Take the buffer contents for submission, leaving the pad empty.
+    /// Whitespace-only lines of a multi-line buffer are suppressed per
+    /// `suppression` (kwi #46); a single-line buffer is returned verbatim so
+    /// single-command editing is never altered.
+    pub fn take_submit(&mut self, suppression: WhitespaceSuppression) -> String {
         self.selection = None;
         self.cursor = 0;
-        strip_trailing_blank_lines(std::mem::take(&mut self.buffer))
+        let buffer = std::mem::take(&mut self.buffer);
+        match suppression {
+            WhitespaceSuppression::None => buffer,
+            WhitespaceSuppression::Trailing => strip_trailing_blank_lines(buffer),
+            WhitespaceSuppression::All => strip_all_blank_lines(buffer),
+        }
     }
 
     /// Buffer chars, current-line `[start, end)` char bounds, and the cursor's
@@ -519,6 +523,34 @@ impl InputPad {
     }
 }
 
+/// How whitespace-only lines of a multi-line submission are handled (kwi #46).
+/// Derived from the `suppress_multiline_whitespace` /
+/// `suppress_multiline_trailing_whitespace_lines` config keys; a single-line
+/// buffer is never altered under any policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhitespaceSuppression {
+    /// Submit the buffer as typed.
+    None,
+    /// Strip the trailing run of whitespace-only lines (the default).
+    Trailing,
+    /// Suppress every whitespace-only line, interior included.
+    All,
+}
+
+impl WhitespaceSuppression {
+    /// Resolve the two config flags into a policy: `all` overrides `trailing`
+    /// (kwi #46 documented precedence).
+    pub fn from_flags(all: bool, trailing: bool) -> Self {
+        if all {
+            WhitespaceSuppression::All
+        } else if trailing {
+            WhitespaceSuppression::Trailing
+        } else {
+            WhitespaceSuppression::None
+        }
+    }
+}
+
 /// Strip trailing whitespace-only lines from a multi-line submission, keeping
 /// interior blank lines intact (kwi #46; default behavior). A single-line buffer
 /// — one with no `\n` — is returned unchanged, including any trailing whitespace,
@@ -532,6 +564,21 @@ fn strip_trailing_blank_lines(buffer: String) -> String {
         lines.pop();
     }
     lines.join("\n")
+}
+
+/// Suppress every whitespace-only line — interior and trailing — from a
+/// multi-line submission (kwi #46, `suppress_multiline_whitespace`). A
+/// single-line buffer is returned unchanged; a buffer of only whitespace lines
+/// submits as empty.
+fn strip_all_blank_lines(buffer: String) -> String {
+    if !buffer.contains('\n') {
+        return buffer;
+    }
+    buffer
+        .split('\n')
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// kapollo's own history of submitted inputs, separate from the wrapped shell's
@@ -706,7 +753,10 @@ mod tests {
     fn take_submit_returns_buffer_and_clears() {
         let mut pad = InputPad::new();
         pad.set_contents("line1\nline2");
-        assert_eq!(pad.take_submit(), "line1\nline2");
+        assert_eq!(
+            pad.take_submit(WhitespaceSuppression::Trailing),
+            "line1\nline2"
+        );
         assert!(pad.is_empty());
     }
 

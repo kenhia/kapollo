@@ -2,7 +2,7 @@
 //! submitting; Enter submits the whole multiline buffer; Up/Down recall
 //! kapollo's own input history (FR-010, FR-011, FR-013, SC-007).
 
-use kapollo::input::{InputHistory, InputPad};
+use kapollo::input::{InputHistory, InputPad, WhitespaceSuppression};
 
 #[test]
 fn newline_insertion_builds_a_multiline_buffer() {
@@ -22,7 +22,7 @@ fn newline_insertion_builds_a_multiline_buffer() {
 fn enter_submits_the_whole_multiline_buffer_as_one_unit() {
     let mut pad = InputPad::new();
     pad.set_contents("line1\nline2\nline3");
-    let submitted = pad.take_submit();
+    let submitted = pad.take_submit(WhitespaceSuppression::Trailing);
     assert_eq!(submitted, "line1\nline2\nline3");
     assert!(pad.is_empty(), "submitting clears the pad");
 }
