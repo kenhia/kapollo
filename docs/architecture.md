@@ -2,8 +2,8 @@
 
 > Status: **DRAFT** for review. Derived from
 > [sprints/planning/brainstorm.md](../sprints/planning/brainstorm.md) decisions
-> D1–D30. This is the authoritative technical reference per Constitution
-> Principle II (Architecture First). Update during each spec's polish phase.
+> D1–D30. This is the authoritative technical reference. Update it in the
+> same sprint as any change it describes.
 
 Last updated: 2026-06-04 (grid rework 004: terminal-grid model via `wezterm-term`,
 mouse selection/copy/scroll, block store with retained text — reverses D4, see §8)
@@ -35,7 +35,7 @@ terminal via **passthrough**.
   cells with scrollback, so in-place redraws, inline color, and mouse selection
   work natively. Alt-screen apps are still handed to the host via mouse/keyboard
   routing (§4, §13). See §13 for the grid architecture.
-- **TUI integrity** (Constitution VI): logs never touch the screen; panics
+- **TUI integrity**: logs never touch the screen; panics
   are caught at the event-loop boundary; terminal state is always restored.
 
 ## 2. Layered Architecture
@@ -86,7 +86,12 @@ terminal via **passthrough**.
 - **Output Processor** — Parses the PTY byte stream with `vte`. Its jobs:
   (1) detect **OSC 133** prompt/command marks for block boundaries (D12);
   (2) detect **alt-screen** enter/leave (`?1049h`/`?1049l`) to trigger
-  passthrough; (3) emit output segments tagged with the current block;
+  passthrough; (3) emit an ordered event stream of capture-gated output
+  spans and boundary marks — block association is the **Block Assembler**'s
+  job: it keeps a FIFO of in-flight commands (submissions push, the end mark
+  closes the front and pops), so a command submitted while another is running
+  waits its turn instead of stealing the running block's output or its end
+  mark (kwi #34);
   (4) **normalize captured output to clean printable text** — `vte` swallows
   complete OSC/CSI/DCS escape sequences (so SGR styling and terminal
   query/responses never leak as text), and the performer keeps only `\n` and
@@ -131,7 +136,7 @@ terminal via **passthrough**.
 - **App / Event Loop** — Owns `State`, wires the layers, runs the main
   select loop (input events ⨉ PTY output ⨉ child-exit ⨉ ticks), and is the
   **panic boundary**: a panic is caught, the terminal is restored, and the
-  error is logged + surfaced (Constitution VI).
+  error is logged to the file sink (never the screen) + surfaced.
 - **Config & Persistence** — Loads `~/.config/kapollo/config.toml` (D15);
   provides typed config to all layers. Future: history DB and AI sections
   live here without bloating the base file.
@@ -165,6 +170,13 @@ DB (D13), and AI (D11).
         └── (post-MVP) persist to history DB if enabled & not private
 ```
 
+A command submitted while another is still running does not disturb the
+running block: its blocks are queued at the back of the in-flight FIFO, the
+raw bytes go to the PTY immediately (the kernel buffers them; the shell reads
+them at its next prompt, exactly as in a real terminal), and its own capture
+opens at its `C` mark after the running command's `D` closes the front of the
+queue (kwi #34).
+
 ### Block boundary detection (D12)
 1. **Primary — OSC 133 semantic prompt marks.** kapollo installs (or asks
    the user to source) a small per-shell hook that emits:
@@ -173,7 +185,12 @@ DB (D13), and AI (D11).
    - `OSC 133;C` — command output start
    - `OSC 133;D;<exit>` — command finished, with exit code
    The Output Processor reads these to delimit blocks and capture exit
-   codes precisely. fish and bash hooks are provided for MVP (D17).
+   codes precisely. fish and bash hooks are provided for MVP (D17); since
+   sprint 010 they emit all four marks — `A`/`B` bracket the prompt (fish: an
+   event handler + a `fish_prompt` wrapper; bash: `PS1` wrapped in `\[`/`\]`
+   marks, re-applied after any prompt manager rewrites it), and the processor
+   diverts the span's normalized text into a `Prompt` event that feeds the
+   divider fold (kwi #47).
 2. **Fallback — sentinel injection.** When marks are unavailable, kapollo
    appends a unique sentinel echo to each submitted command (e.g.
    `; printf '\\e]133;D;%s\\a' $?` equivalent) and watches for it. Less
@@ -353,7 +370,7 @@ kapollo/                  # crate (bin = "kap", also installs "kapollo")
   which keeps the door open, but Windows PTY (ConPTY) and shell-hook
   differences are deferred problems.
 
-## 10. Observability & Failure (Constitution VI)
+## 10. Observability & Failure
 
 - **Logging**: `tracing` to a file sink under the XDG state/cache dir;
   default quiet; `--verbose`/`KAPOLLO_LOG` opt-in. Never write logs to the
@@ -556,4 +573,4 @@ state lives in `src/input/mod.rs` (pure pieces) and is wired in `src/app.rs`.
   `{leader}pipe <cmd>`, so it chains as the new previous output. `/load` reads
   a file's lines into the buffer and enters `Laat` with line 0 highlighted.
   Filesystem operations are system-boundary ops: errors surface as status
-  messages, never panics (Constitution VII).
+  messages, never panics.

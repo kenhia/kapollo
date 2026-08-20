@@ -133,7 +133,7 @@ there for partial-redraw optimization — a real plus for a shipping grid.
 - Isolation: root `cargo tree | grep -E 'vt100|alacritty_terminal|wezterm-term|
   termwiz|tui-term'` is empty; root `cargo build` + `cargo test` still pass — spike
   deps confined to `delos/`.
-- **Interactive feel (Constitution III):** requires a human at a real terminal —
+- **Interactive feel:** requires a human at a real terminal —
   run `cargo run -p spike-alacritty` inside `delos/`, exercise drag-select across
   the scrollback boundary, right-click copy, `--clipboard=arboard`, and a
   full-screen TUI child (e.g. `vim`) to confirm alt-screen handover and that

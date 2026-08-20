@@ -38,6 +38,45 @@ per_block_lines = 10
 }
 
 #[test]
+fn input_prompt_defaults_on_and_can_be_disabled() {
+    // kwi #37: the input-pad prompt glyph is opt-out.
+    assert!(Config::default().input_prompt);
+    let cfg = Config::from_toml("input_prompt = false\n", Path::new("test.toml"))
+        .expect("input_prompt should parse");
+    assert!(!cfg.input_prompt);
+}
+
+#[test]
+fn whitespace_suppression_knobs_default_to_trailing_only() {
+    // kwi #46: trailing-strip on, all-lines off, both configurable.
+    let d = Config::default();
+    assert!(!d.suppress_multiline_whitespace);
+    assert!(d.suppress_multiline_trailing_whitespace_lines);
+
+    let cfg = Config::from_toml(
+        "suppress_multiline_whitespace = true\nsuppress_multiline_trailing_whitespace_lines = false\n",
+        Path::new("test.toml"),
+    )
+    .expect("suppression knobs should parse");
+    assert!(cfg.suppress_multiline_whitespace);
+    assert!(!cfg.suppress_multiline_trailing_whitespace_lines);
+}
+
+#[test]
+fn running_color_defaults_yellow_and_parses_names() {
+    // kwi #35: the input-pad prompt wears this color while a command runs.
+    use ratatui::style::Color;
+    assert_eq!(Config::default().running_color, Color::Yellow);
+    let cfg = Config::from_toml("running_color = \"cyan\"\n", Path::new("test.toml"))
+        .expect("running_color should parse");
+    assert_eq!(cfg.running_color, Color::Cyan);
+    // An unknown color name warns and keeps the default, like prompt_color.
+    let cfg = Config::from_toml("running_color = \"nonsense\"\n", Path::new("test.toml"))
+        .expect("unknown color must not be fatal");
+    assert_eq!(cfg.running_color, Color::Yellow);
+}
+
+#[test]
 fn per_block_bytes_clamped_to_hard_max() {
     let text = format!(
         "[caps]\nper_block_bytes = {}\n",

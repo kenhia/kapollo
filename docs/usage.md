@@ -28,7 +28,9 @@ Run `/keys` at any time for the live, authoritative list of bindings.
 
 On submit, trailing blank (whitespace-only) lines of a multiline buffer are
 dropped so a stray empty last line does not run an extra command; interior blank
-lines are preserved and single-line input is never altered.
+lines are preserved and single-line input is never altered. Both behaviors are
+configurable — see `suppress_multiline_whitespace` and
+`suppress_multiline_trailing_whitespace_lines` under Configuration.
 
 ### Cursor motion & line editing (input pad)
 
@@ -63,6 +65,7 @@ transcript: starting a selection in one clears the other.
 | **PageUp** / **PageDown** | Scroll a page at a time (keeping `scroll.context_lines` of overlap) |
 | **Shift+PageUp** / **Shift+PageDown** | Scroll one line at a time |
 | **Shift+Home** / **Shift+End** | Jump to the oldest / newest output |
+| **Ctrl+L** | Semi-clear: blank the visible pane, keeping scrollback (unlike `/clear`) |
 
 `Shift+Enter` requires a terminal that supports the Kitty keyboard protocol;
 `Alt+Enter` is the universal fallback for inserting a newline.
@@ -116,7 +119,8 @@ inline color appear exactly as the program intended.
 
 | Mouse action | Result |
 |--------------|--------|
-| **Left-drag** | Select a range of text; auto-scrolls when you drag past the top or bottom edge |
+| **Left-click** (no drag) | Nothing — a plain click never places a selection |
+| **Left-drag** | Select a range of text; auto-scrolls when you drag past the top or bottom edge. To select a single cell on purpose, drag out and back |
 | **Right-click** on an active selection | Copy the selection |
 | **Right-click** with no selection | Copy the block under the cursor, including its command line |
 | **Scroll wheel** | Scroll the transcript (see `scroll.wheel_lines`) |
@@ -147,7 +151,7 @@ literal leading leader char to the shell.
 | Command | Action |
 |---------|--------|
 | `/help` | Show available slash commands |
-| `/clear` | Clear the visible transcript |
+| `/clear` | Full reset: clear the transcript **and** its scrollback (Ctrl+L keeps scrollback) |
 | `/status` | Toggle the fixed status bar on or off |
 | `/keys` | List the active key bindings (the live, effective keymap) |
 | `/reload-config` | Re-read the config file without restarting; applies keymap and other changes, keeping your in-progress input |
@@ -218,6 +222,24 @@ prompt_char = "λ"
 # Color of the prompt glyph (named color; default "red"). Honors NO_COLOR.
 prompt_color = "red"
 
+# Show the prompt glyph (prompt_char + space) at the start of the input pad,
+# matching the transcript echo (default true). Continuation lines of a
+# multiline buffer are indented to keep one left edge.
+input_prompt = true
+
+# Color the input-pad prompt glyph wears while a command is running (default
+# "yellow"). Under NO_COLOR the status bar's "…" exit-slot marker carries the
+# running cue instead.
+running_color = "yellow"
+
+# Whitespace-only lines in a MULTILINE submission (single-line input is never
+# altered). By default only the trailing run of blank lines is stripped;
+# setting suppress_multiline_whitespace = true suppresses interior blank lines
+# too and overrides the trailing knob. Set both false to submit exactly what
+# you typed.
+suppress_multiline_whitespace = false
+suppress_multiline_trailing_whitespace_lines = true
+
 [caps]
 # Per-block output retention. Defaults: 1 MiB / 50000 lines.
 # Hard maximum for per_block_bytes is 64 MiB.
@@ -260,6 +282,17 @@ enabled = true
 [divider]
 # Draw a horizontal rule directly above the input pad (default true).
 enabled = true
+# Fold the wrapped shell's own prompt into the rule (default false): the rule
+# becomes `── ken@host ~/src ──────` and the prompt's tail (e.g. "> ") becomes
+# the input pad's prefix, replacing the prompt glyph. A multi-line prompt
+# (e.g. starship) puts its last line into the input pad and the rest into the
+# rule. Requires the OSC 133 prompt marks from the fish/bash hooks — with
+# other shells (sentinel mode) the plain rule renders instead. On multiline
+# input the brought-down prefix is dropped so every line aligns flush left.
+prompt = false
+# For a ONE-line prompt: trailing characters brought down as the input-pad
+# prefix (default 2).
+prompt_bring_down = 2
 
 [keymap]
 # Rebind any editing/scrolling action (see "Configurable key bindings" above
@@ -277,12 +310,20 @@ When a block exceeds its cap, the oldest output is dropped and a
 The transcript renders kapollo's emulated terminal grid directly, so command
 output looks exactly as it would in a normal terminal. Directly above the input
 pad a horizontal **divider** rule separates the transcript from your input
-(toggle with `[divider] enabled`).
+(toggle with `[divider] enabled`). With `[divider] prompt = true` the rule
+carries your shell's own prompt — `── ken@host ~/src ──────` — and the
+prompt's tail (a one-line prompt's last `prompt_bring_down` characters, or a
+two-line prompt's whole second line) becomes the input pad's prefix, so the
+input area starts clean while the prompt context stays visible.
 
 Beneath the input pad a single-line **status bar** shows, left to right: a
 4-column **mode** field (`norm` by default), the current working directory
 (which follows `cd`), an optional transient **message**, and the last command's
-**exit code** hugging the right edge. The bar never wraps: when space runs short
+**exit code** hugging the right edge. While a command is running the exit slot
+shows `…` instead, and the input-pad prompt glyph wears `running_color` — so a
+slow, silent command is visibly still going, and its completion is visible even
+when the new exit code equals the old one (with or without color).
+The bar never wraps: when space runs short
 the message is shortened first, then the cwd is middle-ellipsized (e.g.
 `/home/…/kapollo`), while the mode and exit code are always preserved. Toggle the
 bar with `/status`; it auto-hides on terminals shorter than 10 rows.

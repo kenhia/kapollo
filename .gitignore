@@ -18,3 +18,9 @@ flamegraph.svg
 
 # Harness
 .env
+
+# local sprint marker (start-sprint skill)
+.korg-sprint-proposal
+
+# Local per-machine MCP server config
+.vscode/mcp.json

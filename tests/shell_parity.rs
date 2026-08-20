@@ -1,29 +1,27 @@
 //! T058 parity check: run an identical command sequence under fish and bash
 //! through the full PTY -> OutputProcessor -> Transcript pipeline, and confirm
 //! blocks, captured output, exit codes, and shell-state persistence match
-//! (SC-009). This is a live-shell integration test (Constitution III
-//! documented exception).
+//! (SC-009). This is a live-shell integration test — real-shell behavior
+//! cannot be unit-tested in isolation.
 
 use std::time::{Duration, Instant};
 
 use kapollo::config::Caps;
-use kapollo::output::{Boundary, OutputProcessor};
+use kapollo::output::{BlockAssembler, OutputProcessor};
 use kapollo::pty::{PtyEvent, PtySession};
-use kapollo::session::{BlockId, Transcript};
+use kapollo::session::{BlockId, BlockStore, Transcript};
 
 /// Absorb the shell's startup output (banner, first prompt, and any boundary
 /// marks the rcfile/init emits before a command runs) so it does not leak into
-/// the first command's block. Marks are fed with no current block, mirroring
-/// the real app where `current_block` is `None` at startup.
+/// the first command's block. Marks are fed with nothing in flight, mirroring
+/// the real app where the assembler is idle at startup.
 fn drain_startup(session: &mut PtySession, processor: &mut OutputProcessor) {
-    let mut transcript = Transcript::new(Caps::default());
-    let mut current: Option<BlockId> = None;
     let idle_after = Duration::from_millis(400);
     let mut last = Instant::now();
     while last.elapsed() < idle_after {
         match session.recv_timeout(Duration::from_millis(100)) {
             Ok(PtyEvent::Output(bytes)) => {
-                processor.apply(&bytes, &mut transcript, &mut current);
+                let _ = processor.process(&bytes);
                 last = Instant::now();
             }
             Ok(PtyEvent::Exited(_)) => break,
@@ -36,24 +34,27 @@ fn drain_startup(session: &mut PtySession, processor: &mut OutputProcessor) {
 fn run_command(
     session: &mut PtySession,
     processor: &mut OutputProcessor,
+    assembler: &mut BlockAssembler,
     transcript: &mut Transcript,
+    store: &mut BlockStore,
     command: &str,
 ) -> (String, Option<i32>) {
     let id: BlockId = transcript.begin_block(command.to_string());
-    let mut current = Some(id);
-    processor.begin_command();
+    let sid = store.begin(command.to_string(), None);
+    if assembler.is_idle() {
+        processor.begin_command();
+    }
+    assembler.begin(id, sid);
     session.send_command(command).expect("send command");
 
     let deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < deadline {
+    'drain: while Instant::now() < deadline {
         match session.recv_timeout(Duration::from_millis(250)) {
             Ok(PtyEvent::Output(bytes)) => {
-                let boundaries = processor.apply(&bytes, transcript, &mut current);
-                if boundaries
-                    .iter()
-                    .any(|b| matches!(b, Boundary::CommandEnd { .. }))
-                {
-                    break;
+                for event in processor.process(&bytes) {
+                    if assembler.apply(&event, transcript, store, 0).is_some() {
+                        break 'drain;
+                    }
                 }
             }
             Ok(PtyEvent::Exited(_)) => break,
@@ -68,7 +69,9 @@ fn run_command(
 fn parity_run(shell: &str) -> Vec<(String, Option<i32>)> {
     let mut session = PtySession::spawn(Some(shell)).expect("spawn shell");
     let mut processor = OutputProcessor::for_mode(session.boundary_mode(), session.nonce());
+    let mut assembler = BlockAssembler::new();
     let mut transcript = Transcript::new(Caps::default());
+    let mut store = BlockStore::new(&Caps::default());
 
     // Discard startup output (incl. bash's initial PROMPT_COMMAND mark) so it
     // does not desync the first command's block.
@@ -76,32 +79,27 @@ fn parity_run(shell: &str) -> Vec<(String, Option<i32>)> {
 
     let mut results = Vec::new();
     // cd then pwd proves shell state persists across commands.
-    run_command(&mut session, &mut processor, &mut transcript, "cd /tmp");
-    results.push(run_command(
-        &mut session,
-        &mut processor,
-        &mut transcript,
-        "pwd",
-    ));
-    results.push(run_command(
-        &mut session,
-        &mut processor,
-        &mut transcript,
-        "echo parity_ok",
-    ));
-    results.push(run_command(
-        &mut session,
-        &mut processor,
-        &mut transcript,
-        "false",
-    ));
+    let mut run = |command: &str| {
+        run_command(
+            &mut session,
+            &mut processor,
+            &mut assembler,
+            &mut transcript,
+            &mut store,
+            command,
+        )
+    };
+    run("cd /tmp");
+    results.push(run("pwd"));
+    results.push(run("echo parity_ok"));
+    results.push(run("false"));
     results
 }
 
 #[test]
 fn fish_and_bash_core_run_loop_match() {
-    // Live-shell integration test (Constitution III documented exception): it
-    // requires both shells on the host. Skip gracefully when one is missing
+    // Live-shell integration test: it requires both shells on the host.
+    // Skip gracefully when one is missing
     // (e.g. a contributor box without fish) rather than fail; CI installs fish
     // so the parity guarantee stays exercised there.
     for sh in ["/usr/bin/fish", "/usr/bin/bash"] {

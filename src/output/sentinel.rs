@@ -100,7 +100,7 @@ mod tests {
             .iter()
             .flat_map(|e| match e {
                 ProcessorEvent::Output(b) => b.clone(),
-                ProcessorEvent::Boundary(_) => Vec::new(),
+                _ => Vec::new(),
             })
             .collect();
         assert_eq!(merged, b"out ");

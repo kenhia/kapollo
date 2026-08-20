@@ -17,6 +17,14 @@ pub const PER_BLOCK_BYTES_HARD_MAX: u64 = 64 * 1024 * 1024;
 const DEFAULT_LEADER_CHAR: char = '/';
 const DEFAULT_PROMPT_CHAR: char = 'λ';
 const DEFAULT_PROMPT_COLOR: Color = Color::Red;
+// The input pad shows the prompt glyph before the composing text (kwi #37).
+const DEFAULT_INPUT_PROMPT: bool = true;
+// The input-pad prompt glyph wears this color while a command runs (kwi #35).
+const DEFAULT_RUNNING_COLOR: Color = Color::Yellow;
+// Multiline-submit whitespace handling (kwi #46): by default only the trailing
+// run of whitespace-only lines is stripped (the sprint-005 T034 behavior).
+const DEFAULT_SUPPRESS_MULTILINE_WHITESPACE: bool = false;
+const DEFAULT_SUPPRESS_MULTILINE_TRAILING: bool = true;
 const DEFAULT_PER_BLOCK_BYTES: u64 = 1024 * 1024; // 1 MiB
 const DEFAULT_PER_BLOCK_LINES: u64 = 50_000;
 const DEFAULT_TRANSCRIPT_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
@@ -37,12 +45,19 @@ const DEFAULT_CONTEXT_LINES: u16 = 3;
 // The cosmetic dividing rule between the output and input pads (the Apollo /
 // Domain OS lineage) is shown by default.
 const DEFAULT_DIVIDER_ENABLED: bool = true;
+// Folding the captured shell prompt into the divider is opt-in (kwi #47).
+const DEFAULT_DIVIDER_PROMPT: bool = false;
+const DEFAULT_DIVIDER_PROMPT_BRING_DOWN: u16 = 2;
 
 const TOP_LEVEL_KEYS: &[&str] = &[
     "shell",
     "leader_char",
     "prompt_char",
     "prompt_color",
+    "input_prompt",
+    "running_color",
+    "suppress_multiline_whitespace",
+    "suppress_multiline_trailing_whitespace_lines",
     "caps",
     "mouse",
     "clipboard",
@@ -61,7 +76,7 @@ const MOUSE_KEYS: &[&str] = &["enabled", "copy_on_select"];
 const CLIPBOARD_KEYS: &[&str] = &["osc52", "local_fallback"];
 const SCROLL_KEYS: &[&str] = &["wheel_lines", "scrollback_lines", "context_lines"];
 const STATUS_KEYS: &[&str] = &["enabled"];
-const DIVIDER_KEYS: &[&str] = &["enabled"];
+const DIVIDER_KEYS: &[&str] = &["enabled", "prompt", "prompt_bring_down"];
 
 /// Effective kapollo configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +90,18 @@ pub struct Config {
     /// Color applied to the prompt character when color is enabled
     /// (default red; FR-011).
     pub prompt_color: Color,
+    /// Whether the input pad shows the prompt glyph (`{prompt_char} `) before
+    /// the composing text (default true; kwi #37).
+    pub input_prompt: bool,
+    /// Color the input-pad prompt glyph wears while a command is running
+    /// (default yellow; kwi #35). Honors `NO_COLOR` like `prompt_color`.
+    pub running_color: Color,
+    /// Suppress ALL whitespace-only lines (interior included) from a multiline
+    /// submission (default false; kwi #46). Overrides the trailing-only knob.
+    pub suppress_multiline_whitespace: bool,
+    /// Suppress the trailing run of whitespace-only lines from a multiline
+    /// submission (default true — the shipped sprint-005 behavior; kwi #46).
+    pub suppress_multiline_trailing_whitespace_lines: bool,
     /// Output retention caps.
     pub caps: Caps,
     /// Mouse capture / selection behavior (sprint 004, D28).
@@ -130,12 +157,21 @@ pub struct Status {
     pub enabled: bool,
 }
 
-/// Cosmetic dividing rule between the output and input pads (sprint 005). Purely
-/// decorative today; it is the visual lineage back to Apollo / Domain OS.
+/// The dividing rule between the output and input pads (sprint 005) — the
+/// visual lineage back to Apollo / Domain OS. Optionally folds the captured
+/// shell prompt into the rule (sprint 010, kwi #47).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Divider {
     /// Whether the dividing rule above the input pad is shown.
     pub enabled: bool,
+    /// Fold the wrapped shell's prompt (captured via OSC 133 `A`/`B`) into
+    /// the rule instead of leaving it in the transcript flow (default false;
+    /// kwi #47). Unavailable in sentinel mode (no prompt marks).
+    pub prompt: bool,
+    /// For a ONE-line prompt: how many trailing characters are brought down
+    /// as the input pad's prefix (default 2, e.g. `> `). A multi-line prompt
+    /// brings its whole last line down instead.
+    pub prompt_bring_down: u16,
 }
 
 /// Output retention caps (ring-buffer semantics; FR-016).
@@ -154,6 +190,10 @@ impl Default for Config {
             leader_char: DEFAULT_LEADER_CHAR,
             prompt_char: DEFAULT_PROMPT_CHAR,
             prompt_color: DEFAULT_PROMPT_COLOR,
+            input_prompt: DEFAULT_INPUT_PROMPT,
+            running_color: DEFAULT_RUNNING_COLOR,
+            suppress_multiline_whitespace: DEFAULT_SUPPRESS_MULTILINE_WHITESPACE,
+            suppress_multiline_trailing_whitespace_lines: DEFAULT_SUPPRESS_MULTILINE_TRAILING,
             caps: Caps::default(),
             mouse: Mouse::default(),
             clipboard: Clipboard::default(),
@@ -205,6 +245,8 @@ impl Default for Divider {
     fn default() -> Self {
         Self {
             enabled: DEFAULT_DIVIDER_ENABLED,
+            prompt: DEFAULT_DIVIDER_PROMPT,
+            prompt_bring_down: DEFAULT_DIVIDER_PROMPT_BRING_DOWN,
         }
     }
 }
@@ -272,6 +314,10 @@ struct RawConfig {
     leader_char: Option<String>,
     prompt_char: Option<String>,
     prompt_color: Option<String>,
+    input_prompt: Option<bool>,
+    running_color: Option<String>,
+    suppress_multiline_whitespace: Option<bool>,
+    suppress_multiline_trailing_whitespace_lines: Option<bool>,
     caps: Option<RawCaps>,
     mouse: Option<RawMouse>,
     clipboard: Option<RawClipboard>,
@@ -308,6 +354,8 @@ struct RawStatus {
 #[derive(Debug, Default, Deserialize)]
 struct RawDivider {
     enabled: Option<bool>,
+    prompt: Option<bool>,
+    prompt_bring_down: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -361,6 +409,17 @@ impl RawConfig {
             None => DEFAULT_PROMPT_COLOR,
         };
 
+        let running_color = match self.running_color {
+            Some(s) => match Color::from_str(&s) {
+                Ok(color) => color,
+                Err(_) => {
+                    tracing::warn!(value = %s, "unknown running_color; using default");
+                    DEFAULT_RUNNING_COLOR
+                }
+            },
+            None => DEFAULT_RUNNING_COLOR,
+        };
+
         let defaults = Caps::default();
         let raw_caps = self.caps.unwrap_or_default();
         let mut caps = Caps {
@@ -388,6 +447,14 @@ impl RawConfig {
             leader_char,
             prompt_char,
             prompt_color,
+            input_prompt: self.input_prompt.unwrap_or(DEFAULT_INPUT_PROMPT),
+            running_color,
+            suppress_multiline_whitespace: self
+                .suppress_multiline_whitespace
+                .unwrap_or(DEFAULT_SUPPRESS_MULTILINE_WHITESPACE),
+            suppress_multiline_trailing_whitespace_lines: self
+                .suppress_multiline_trailing_whitespace_lines
+                .unwrap_or(DEFAULT_SUPPRESS_MULTILINE_TRAILING),
             caps,
             mouse: {
                 let raw = self.mouse.unwrap_or_default();
@@ -426,6 +493,8 @@ impl RawConfig {
                 let d = Divider::default();
                 Divider {
                     enabled: raw.enabled.unwrap_or(d.enabled),
+                    prompt: raw.prompt.unwrap_or(d.prompt),
+                    prompt_bring_down: raw.prompt_bring_down.unwrap_or(d.prompt_bring_down),
                 }
             },
             keymaps: build_keymaps(self.keymap),

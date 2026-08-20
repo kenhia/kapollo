@@ -4,30 +4,64 @@
 //! SC-003).
 
 use kapollo::config::Caps;
-use kapollo::output::OutputProcessor;
-use kapollo::session::{BlockState, Transcript};
+use kapollo::output::{BlockAssembler, OutputProcessor};
+use kapollo::session::{BlockState, BlockStore, Transcript};
 
 fn transcript() -> Transcript {
     Transcript::new(Caps::default())
 }
 
+fn apply(
+    processor: &mut OutputProcessor,
+    assembler: &mut BlockAssembler,
+    tx: &mut Transcript,
+    store: &mut BlockStore,
+    bytes: &[u8],
+) {
+    for event in processor.process(bytes) {
+        assembler.apply(&event, tx, store, 0);
+    }
+}
+
 #[test]
 fn alt_screen_enter_marks_block_interactive_and_suspends_capture() {
     let mut processor = OutputProcessor::osc133();
+    let mut assembler = BlockAssembler::new();
     let mut tx = transcript();
+    let mut store = BlockStore::new(&Caps::default());
     let id = tx.begin_block("vim notes.txt".to_string());
-    let mut current = Some(id);
+    let sid = store.begin("vim notes.txt".to_string(), None);
+    processor.begin_command();
+    assembler.begin(id, sid);
 
     // Output starts, then the program switches to the alternate screen.
-    processor.apply(b"\x1b]133;C\x07", &mut tx, &mut current);
-    processor.apply(b"\x1b[?1049h", &mut tx, &mut current);
+    apply(
+        &mut processor,
+        &mut assembler,
+        &mut tx,
+        &mut store,
+        b"\x1b]133;C\x07",
+    );
+    apply(
+        &mut processor,
+        &mut assembler,
+        &mut tx,
+        &mut store,
+        b"\x1b[?1049h",
+    );
 
     assert!(processor.in_alt_screen(), "processor tracks passthrough");
     let block = tx.block(id).expect("block exists");
     assert_eq!(block.state, BlockState::Interactive);
 
     // Full-screen drawing bytes are not captured into the transcript.
-    processor.apply(b"editor screen contents", &mut tx, &mut current);
+    apply(
+        &mut processor,
+        &mut assembler,
+        &mut tx,
+        &mut store,
+        b"editor screen contents",
+    );
     let block = tx.block(id).expect("block exists");
     assert!(
         block.output_lossy().is_empty(),
@@ -38,21 +72,37 @@ fn alt_screen_enter_marks_block_interactive_and_suspends_capture() {
 #[test]
 fn alt_screen_leave_restores_the_block_and_resumes_capture() {
     let mut processor = OutputProcessor::osc133();
+    let mut assembler = BlockAssembler::new();
     let mut tx = transcript();
+    let mut store = BlockStore::new(&Caps::default());
     let id = tx.begin_block("vim notes.txt".to_string());
-    let mut current = Some(id);
+    let sid = store.begin("vim notes.txt".to_string(), None);
+    processor.begin_command();
+    assembler.begin(id, sid);
 
-    processor.apply(b"\x1b]133;C\x07", &mut tx, &mut current);
-    processor.apply(b"\x1b[?1049h", &mut tx, &mut current);
-    processor.apply(b"\x1b[?1049l", &mut tx, &mut current);
+    for bytes in [b"\x1b]133;C\x07".as_slice(), b"\x1b[?1049h", b"\x1b[?1049l"] {
+        apply(&mut processor, &mut assembler, &mut tx, &mut store, bytes);
+    }
 
     assert!(!processor.in_alt_screen(), "passthrough has ended");
     let block = tx.block(id).expect("block exists");
     assert_eq!(block.state, BlockState::Running);
 
     // Trailing output after the program exits is captured again.
-    processor.apply(b"done\n", &mut tx, &mut current);
-    processor.apply(b"\x1b]133;D;0\x07", &mut tx, &mut current);
+    apply(
+        &mut processor,
+        &mut assembler,
+        &mut tx,
+        &mut store,
+        b"done\n",
+    );
+    apply(
+        &mut processor,
+        &mut assembler,
+        &mut tx,
+        &mut store,
+        b"\x1b]133;D;0\x07",
+    );
     let block = tx.block(id).expect("block exists");
     assert!(block.output_lossy().contains("done"));
     assert_eq!(block.state, BlockState::Closed);

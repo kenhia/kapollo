@@ -3,7 +3,7 @@
 //! stories build on; the US2 edge-recall cases (C1/C5/C6/C7/C8) live alongside.
 //! See `sprints/007-laat-mode/contracts/input-modes.md` §4.
 
-use kapollo::input::{InputHistory, InputMode, InputPad};
+use kapollo::input::{InputHistory, InputMode, InputPad, WhitespaceSuppression};
 
 /// Model App's mode reconciliation after an edit (FR-008/FR-012): a `Norm`
 /// buffer that grows past one line enters `Mult`; a `Mult` buffer deleted back
@@ -128,7 +128,7 @@ fn c7_plain_enter_in_mult_submits_whole_buffer_as_one() {
     // submission (FR-013): the whole buffer is taken at once.
     let mut pad = InputPad::new();
     pad.set_contents("one\ntwo\nthree");
-    let submitted = pad.take_submit();
+    let submitted = pad.take_submit(WhitespaceSuppression::Trailing);
 
     assert_eq!(submitted, "one\ntwo\nthree");
     assert_eq!(pad.as_str(), "");

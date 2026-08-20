@@ -119,6 +119,7 @@ Run `/keys` for the full, live list.
 | PageUp / PageDown | Scroll the transcript a page at a time |
 | Shift+PageUp / Shift+PageDown | Scroll a line at a time |
 | Shift+Home / Shift+End | Jump to the oldest / newest output |
+| Ctrl+L | Semi-clear: blank the visible pane, keeping scrollback (unlike `/clear`) |
 | Ctrl-C | Copy an active selection, else interrupt the running command |
 | Esc / Esc Esc | Cancel a selection / clear the line; Esc Esc clears a multiline buffer and the status message |
 

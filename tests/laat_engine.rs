@@ -1,7 +1,7 @@
 //! LAAT engine tests (sprint 007): highlight stepping and exit-code gating
 //! (L1–L6). The gating decision is a pure `LaatState` transition; the live
-//! highlight/flag rendering and the `Esc Esc` abort use the Constitution III
-//! manual exception (quickstart). See
+//! highlight/flag rendering and the `Esc Esc` abort are covered by the manual
+//! walkthrough (quickstart) — interactive feel needs a human at a terminal. See
 //! `sprints/007-laat-mode/contracts/laat-engine.md` §6.
 
 use kapollo::input::{InputMode, LaatOutcome, LaatState};

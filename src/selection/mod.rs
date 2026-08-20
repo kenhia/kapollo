@@ -51,6 +51,11 @@ pub struct SelectionController {
     state: SelState,
     anchor: Cell,
     end: Cell,
+    /// Whether the pointer left the anchor cell at any point during this drag
+    /// — the click-vs-drag latch (kwi #45). A release that never moved is a
+    /// plain click and places no selection; dragging out and back deliberately
+    /// still selects the single anchor cell.
+    moved: bool,
 }
 
 impl Default for SelectionController {
@@ -66,6 +71,7 @@ impl SelectionController {
             state: SelState::Idle,
             anchor: (0, 0),
             end: (0, 0),
+            moved: false,
         }
     }
 
@@ -91,22 +97,34 @@ impl SelectionController {
         }
         self.anchor = cell;
         self.end = cell;
+        self.moved = false;
         self.state = SelState::Dragging;
         LeftPress::StartedDrag
     }
 
     /// Extend the active end while dragging (no-op in other states) (FR-007).
+    /// Leaving the anchor cell arms the click-vs-drag latch (kwi #45).
     pub fn drag_to(&mut self, cell: Cell) {
         if self.state == SelState::Dragging {
             self.end = cell;
+            if cell != self.anchor {
+                self.moved = true;
+            }
         }
     }
 
     /// Mouse release finalizes an in-progress drag into an `Active` selection
-    /// (FR-008) — it does **not** copy.
+    /// (FR-008) — it does **not** copy. A release whose pointer never left the
+    /// anchor cell is a plain click, not a selection: the accidental one-cell
+    /// selection would otherwise hijack the next Ctrl-C (copy instead of
+    /// SIGINT) and right-click (kwi #45).
     pub fn release(&mut self) {
         if self.state == SelState::Dragging {
-            self.state = SelState::Active;
+            self.state = if self.moved {
+                SelState::Active
+            } else {
+                SelState::Idle
+            };
         }
     }
 
@@ -252,10 +270,47 @@ mod tests {
     fn second_click_clears_active_selection() {
         let mut s = SelectionController::new();
         s.left_press((1, 1), false);
+        s.drag_to((1, 4));
         s.release();
         assert!(s.is_active());
         assert_eq!(s.left_press((1, 1), false), LeftPress::Cancelled);
         assert_eq!(s.range(), None);
+    }
+
+    #[test]
+    fn plain_click_places_no_selection() {
+        // kwi #45: press + release with no cell movement is a click — no
+        // one-cell selection to hijack the next Ctrl-C or right-click.
+        let mut s = SelectionController::new();
+        s.left_press((3, 3), false);
+        s.release();
+        assert_eq!(s.state(), SelState::Idle);
+        assert_eq!(s.range(), None);
+        assert_eq!(s.ctrl_c(), Trigger::Sigint, "Ctrl-C still interrupts");
+    }
+
+    #[test]
+    fn same_cell_motion_does_not_arm_the_latch() {
+        // Terminals may report drag events without a cell change; those are
+        // still a click (kwi #45).
+        let mut s = SelectionController::new();
+        s.left_press((3, 3), false);
+        s.drag_to((3, 3));
+        s.release();
+        assert_eq!(s.state(), SelState::Idle);
+    }
+
+    #[test]
+    fn drag_out_and_back_keeps_a_deliberate_single_cell_selection() {
+        // kwi #45: the latch remembers movement, so a single cell can still be
+        // selected on purpose by dragging out and returning to the anchor.
+        let mut s = SelectionController::new();
+        s.left_press((3, 3), false);
+        s.drag_to((3, 4));
+        s.drag_to((3, 3));
+        s.release();
+        assert_eq!(s.state(), SelState::Active);
+        assert_eq!(s.range(), Some(((3, 3), (3, 3))));
     }
 
     #[test]
