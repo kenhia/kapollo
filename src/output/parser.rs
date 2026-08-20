@@ -38,6 +38,10 @@ pub enum ProcessorEvent {
     Output(Vec<u8>),
     /// A boundary/mode mark.
     Boundary(Boundary),
+    /// A completed prompt span: the normalized text between the OSC 133 `A`
+    /// and `B` marks, emitted by the processor when `B` arrives (kwi #47).
+    /// The parser itself never produces this variant.
+    Prompt(String),
 }
 
 /// Incremental OSC 133 parser. Maintains `vte` state across `feed` calls so

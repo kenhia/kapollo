@@ -191,7 +191,15 @@ pub fn render(frame: &mut Frame, app: &App) {
     let layout = chrome_layout(area, input_height, show_divider, show_status);
     render_transcript(frame, layout.transcript, app);
     if let Some(divider_area) = layout.divider {
-        divider::render(frame, divider_area, color_enabled());
+        // The captured shell prompt's head folds into the rule when the
+        // divider-prompt feature is enabled (kwi #47).
+        let prompt = app.divider_prompt();
+        divider::render(
+            frame,
+            divider_area,
+            color_enabled(),
+            prompt.as_ref().map(|(head, _)| head.as_str()),
+        );
     }
     render_input(frame, layout.input, app);
     if let Some(status_area) = layout.status {

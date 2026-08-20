@@ -20,6 +20,11 @@ pub struct OutputProcessor {
     sentinel: Option<SentinelScanner>,
     alt_screen: bool,
     capturing: bool,
+    /// Inside an OSC 133 `A`→`B` prompt span: output accumulates into
+    /// `prompt_buf` instead of the block stream (kwi #47). Sentinel-mode
+    /// shells emit no `A`/`B`, so this never engages there.
+    in_prompt: bool,
+    prompt_buf: Vec<u8>,
 }
 
 impl OutputProcessor {
@@ -39,6 +44,8 @@ impl OutputProcessor {
             sentinel: None,
             alt_screen: false,
             capturing: false,
+            in_prompt: false,
+            prompt_buf: Vec::new(),
         }
     }
 
@@ -50,6 +57,8 @@ impl OutputProcessor {
             sentinel: Some(SentinelScanner::new(nonce)),
             alt_screen: false,
             capturing: true,
+            in_prompt: false,
+            prompt_buf: Vec::new(),
         }
     }
 
@@ -77,8 +86,10 @@ impl OutputProcessor {
 
     /// Parse `bytes` into ordered [`ProcessorEvent`]s, dropping output spans
     /// that arrive while capture is off (before a command's `C` mark, between
-    /// commands, or inside an alt-screen program). The caller feeds the
-    /// surviving events to a [`BlockAssembler`] for block association.
+    /// commands, or inside an alt-screen program). Text inside an `A`→`B`
+    /// prompt span is diverted into a [`ProcessorEvent::Prompt`] emitted at
+    /// the `B` mark (kwi #47). The caller feeds the surviving events to a
+    /// [`BlockAssembler`] for block association.
     pub fn process(&mut self, bytes: &[u8]) -> Vec<ProcessorEvent> {
         let mut events = Vec::new();
         self.parse(bytes, &mut events);
@@ -86,17 +97,52 @@ impl OutputProcessor {
         for event in events {
             match event {
                 ProcessorEvent::Output(data) => {
-                    if self.capturing {
+                    if self.in_prompt {
+                        self.prompt_buf.extend_from_slice(&data);
+                    } else if self.capturing {
                         out.push(ProcessorEvent::Output(data));
                     }
                 }
                 ProcessorEvent::Boundary(boundary) => {
+                    if let Some(prompt) = self.prompt_transition(&boundary) {
+                        out.push(ProcessorEvent::Prompt(prompt));
+                    }
                     self.update_capture(&boundary);
                     out.push(ProcessorEvent::Boundary(boundary));
                 }
+                // The parser never emits Prompt; pass through defensively.
+                other => out.push(other),
             }
         }
         out
+    }
+
+    /// Track the `A`→`B` prompt span across boundary marks: `A` opens it, `B`
+    /// closes it and yields the accumulated normalized text. A span still open
+    /// at a command boundary (`C`/`D`) lost its `B` mark — discard it rather
+    /// than mis-capture command output as prompt text.
+    fn prompt_transition(&mut self, boundary: &Boundary) -> Option<String> {
+        match boundary {
+            Boundary::PromptStart => {
+                self.in_prompt = true;
+                self.prompt_buf.clear();
+                None
+            }
+            Boundary::CommandStart => {
+                if !self.in_prompt {
+                    return None;
+                }
+                self.in_prompt = false;
+                let buf = std::mem::take(&mut self.prompt_buf);
+                Some(String::from_utf8_lossy(&buf).into_owned())
+            }
+            Boundary::OutputStart | Boundary::CommandEnd { .. } => {
+                self.in_prompt = false;
+                self.prompt_buf.clear();
+                None
+            }
+            _ => None,
+        }
     }
 
     fn update_capture(&mut self, boundary: &Boundary) {

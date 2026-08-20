@@ -84,6 +84,10 @@ pub struct App {
     /// an earlier command's — surfaces the `pipe non-zero exit` status message
     /// (sprint 007, FR-027).
     pipe_block: Option<BlockId>,
+    /// The wrapped shell's most recent prompt text, captured between the OSC
+    /// 133 `A`/`B` marks and normalized to plain text (kwi #47). `None` until
+    /// the first prompt renders, and always `None` in sentinel mode.
+    shell_prompt: Option<String>,
     /// The one-item input push/pop stack (sprint 007, FR-018…FR-020): a pushed
     /// snapshot is restored on the next submit. `None` means the slot is empty.
     pushed: Option<crate::input::InputSnapshot>,
@@ -136,6 +140,7 @@ impl App {
             passthrough: false,
             pending_prompt: None,
             pipe_block: None,
+            shell_prompt: None,
             pushed: None,
             should_quit: false,
         })
@@ -227,8 +232,14 @@ impl App {
                             row,
                         );
                         // …then the app-level reactions to the same mark.
-                        if let ProcessorEvent::Boundary(boundary) = event {
-                            self.on_boundary(boundary, closed);
+                        match event {
+                            ProcessorEvent::Boundary(boundary) => {
+                                self.on_boundary(boundary, closed)
+                            }
+                            // A freshly rendered prompt: retain it for the
+                            // divider fold (kwi #47). Repaints overwrite.
+                            ProcessorEvent::Prompt(text) => self.shell_prompt = Some(text),
+                            ProcessorEvent::Output(_) => {}
                         }
                     }
                     // Yield back to the event loop once the per-pass budget is
@@ -264,6 +275,22 @@ impl App {
     /// the input-pad prompt wears `running_color` while this is true (kwi #35).
     pub fn command_running(&self) -> bool {
         !self.assembler.is_idle()
+    }
+
+    /// The captured shell prompt split for the divider fold (kwi #47): the
+    /// divider head and the input-pad prefix. `None` unless `[divider] prompt`
+    /// is enabled AND a prompt has been captured — OSC 133 `A`/`B` marks come
+    /// only from the fish/bash hooks, so in sentinel mode the feature is
+    /// simply unavailable and the plain rule renders instead.
+    pub fn divider_prompt(&self) -> Option<(String, String)> {
+        if !self.config.divider.prompt {
+            return None;
+        }
+        let prompt = self.shell_prompt.as_deref()?;
+        Some(crate::ui::divider::split_prompt(
+            prompt,
+            self.config.divider.prompt_bring_down as usize,
+        ))
     }
 
     /// App-level reaction to a boundary mark, after block association:

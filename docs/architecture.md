@@ -185,7 +185,12 @@ queue (kwi #34).
    - `OSC 133;C` — command output start
    - `OSC 133;D;<exit>` — command finished, with exit code
    The Output Processor reads these to delimit blocks and capture exit
-   codes precisely. fish and bash hooks are provided for MVP (D17).
+   codes precisely. fish and bash hooks are provided for MVP (D17); since
+   sprint 010 they emit all four marks — `A`/`B` bracket the prompt (fish: an
+   event handler + a `fish_prompt` wrapper; bash: `PS1` wrapped in `\[`/`\]`
+   marks, re-applied after any prompt manager rewrites it), and the processor
+   diverts the span's normalized text into a `Prompt` event that feeds the
+   divider fold (kwi #47).
 2. **Fallback — sentinel injection.** When marks are unavailable, kapollo
    appends a unique sentinel echo to each submitted command (e.g.
    `; printf '\\e]133;D;%s\\a' $?` equivalent) and watches for it. Less

@@ -111,6 +111,9 @@ impl BlockAssembler {
                 }
                 _ => None,
             },
+            // Prompt spans belong to the app (the divider fold, kwi #47),
+            // never to a block.
+            ProcessorEvent::Prompt(_) => None,
         }
     }
 

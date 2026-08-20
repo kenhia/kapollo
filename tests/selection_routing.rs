@@ -16,7 +16,7 @@ fn apply(payload: &[u8]) -> Vec<Boundary> {
         .into_iter()
         .filter_map(|e| match e {
             ProcessorEvent::Boundary(b) => Some(b),
-            ProcessorEvent::Output(_) => None,
+            _ => None,
         })
         .collect()
 }

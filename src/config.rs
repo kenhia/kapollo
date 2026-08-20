@@ -45,6 +45,9 @@ const DEFAULT_CONTEXT_LINES: u16 = 3;
 // The cosmetic dividing rule between the output and input pads (the Apollo /
 // Domain OS lineage) is shown by default.
 const DEFAULT_DIVIDER_ENABLED: bool = true;
+// Folding the captured shell prompt into the divider is opt-in (kwi #47).
+const DEFAULT_DIVIDER_PROMPT: bool = false;
+const DEFAULT_DIVIDER_PROMPT_BRING_DOWN: u16 = 2;
 
 const TOP_LEVEL_KEYS: &[&str] = &[
     "shell",
@@ -73,7 +76,7 @@ const MOUSE_KEYS: &[&str] = &["enabled", "copy_on_select"];
 const CLIPBOARD_KEYS: &[&str] = &["osc52", "local_fallback"];
 const SCROLL_KEYS: &[&str] = &["wheel_lines", "scrollback_lines", "context_lines"];
 const STATUS_KEYS: &[&str] = &["enabled"];
-const DIVIDER_KEYS: &[&str] = &["enabled"];
+const DIVIDER_KEYS: &[&str] = &["enabled", "prompt", "prompt_bring_down"];
 
 /// Effective kapollo configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,12 +157,21 @@ pub struct Status {
     pub enabled: bool,
 }
 
-/// Cosmetic dividing rule between the output and input pads (sprint 005). Purely
-/// decorative today; it is the visual lineage back to Apollo / Domain OS.
+/// The dividing rule between the output and input pads (sprint 005) — the
+/// visual lineage back to Apollo / Domain OS. Optionally folds the captured
+/// shell prompt into the rule (sprint 010, kwi #47).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Divider {
     /// Whether the dividing rule above the input pad is shown.
     pub enabled: bool,
+    /// Fold the wrapped shell's prompt (captured via OSC 133 `A`/`B`) into
+    /// the rule instead of leaving it in the transcript flow (default false;
+    /// kwi #47). Unavailable in sentinel mode (no prompt marks).
+    pub prompt: bool,
+    /// For a ONE-line prompt: how many trailing characters are brought down
+    /// as the input pad's prefix (default 2, e.g. `> `). A multi-line prompt
+    /// brings its whole last line down instead.
+    pub prompt_bring_down: u16,
 }
 
 /// Output retention caps (ring-buffer semantics; FR-016).
@@ -233,6 +245,8 @@ impl Default for Divider {
     fn default() -> Self {
         Self {
             enabled: DEFAULT_DIVIDER_ENABLED,
+            prompt: DEFAULT_DIVIDER_PROMPT,
+            prompt_bring_down: DEFAULT_DIVIDER_PROMPT_BRING_DOWN,
         }
     }
 }
@@ -340,6 +354,8 @@ struct RawStatus {
 #[derive(Debug, Default, Deserialize)]
 struct RawDivider {
     enabled: Option<bool>,
+    prompt: Option<bool>,
+    prompt_bring_down: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -477,6 +493,8 @@ impl RawConfig {
                 let d = Divider::default();
                 Divider {
                     enabled: raw.enabled.unwrap_or(d.enabled),
+                    prompt: raw.prompt.unwrap_or(d.prompt),
+                    prompt_bring_down: raw.prompt_bring_down.unwrap_or(d.prompt_bring_down),
                 }
             },
             keymaps: build_keymaps(self.keymap),

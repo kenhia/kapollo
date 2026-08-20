@@ -281,6 +281,17 @@ enabled = true
 [divider]
 # Draw a horizontal rule directly above the input pad (default true).
 enabled = true
+# Fold the wrapped shell's own prompt into the rule (default false): the rule
+# becomes `── ken@host ~/src ──────` and the prompt's tail (e.g. "> ") becomes
+# the input pad's prefix, replacing the prompt glyph. A multi-line prompt
+# (e.g. starship) puts its last line into the input pad and the rest into the
+# rule. Requires the OSC 133 prompt marks from the fish/bash hooks — with
+# other shells (sentinel mode) the plain rule renders instead. On multiline
+# input the brought-down prefix is dropped so every line aligns flush left.
+prompt = false
+# For a ONE-line prompt: trailing characters brought down as the input-pad
+# prefix (default 2).
+prompt_bring_down = 2
 
 [keymap]
 # Rebind any editing/scrolling action (see "Configurable key bindings" above
@@ -298,7 +309,11 @@ When a block exceeds its cap, the oldest output is dropped and a
 The transcript renders kapollo's emulated terminal grid directly, so command
 output looks exactly as it would in a normal terminal. Directly above the input
 pad a horizontal **divider** rule separates the transcript from your input
-(toggle with `[divider] enabled`).
+(toggle with `[divider] enabled`). With `[divider] prompt = true` the rule
+carries your shell's own prompt — `── ken@host ~/src ──────` — and the
+prompt's tail (a one-line prompt's last `prompt_bring_down` characters, or a
+two-line prompt's whole second line) becomes the input pad's prefix, so the
+input area starts clean while the prompt context stays visible.
 
 Beneath the input pad a single-line **status bar** shows, left to right: a
 4-column **mode** field (`norm` by default), the current working directory
