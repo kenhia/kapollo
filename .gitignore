@@ -24,3 +24,4 @@ flamegraph.svg
 
 # Local per-machine MCP server config
 .vscode/mcp.json
+.sprint-defaults
